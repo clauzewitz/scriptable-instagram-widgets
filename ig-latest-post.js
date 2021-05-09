@@ -488,7 +488,7 @@ const getLatestPost = async (username, maxRecent) => {
     idx =  visible_posts < idx ? visible_posts : idx;
 
     const rec = user.edge_owner_to_timeline_media.edges[idx].node;
-    const resp = undefined;
+    let resp = undefined;
 
     try {
         resp = await InstagramClient.getPostInfo(rec.shortcode);
