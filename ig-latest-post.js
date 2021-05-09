@@ -545,9 +545,9 @@ const checkWidgetParameter = () => {
             default:
 
                 if (aWidgetParameter.length > 0) {
-                    const users = aWidgetParameter[1].split(/\s*,\s*/);
+                    const users = aWidgetParameter[0].split(/\s*,\s*/);
 
-                    ARGUMENTS.users = users.trim() || ARGUMENTS.users;
+                    ARGUMENTS.users = users || ARGUMENTS.users;
                 }
         }
     }
