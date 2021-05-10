@@ -674,10 +674,11 @@ if (config.runsInWidget) {
     const menu = new UITable();
     menu.showSeparators = true;
     
-    const title = new UITableRow();
-    title.isHeader = true;
-    title.addText('Instagram Latest Widget', `version: ${VERSION}`);
-    menu.addRow(title);
+    const titleRow = new UITableRow();
+    titleRow.isHeader = true;
+    const titleCell = titleRow.addText('Instagram Latest Widget', `version: ${VERSION}`);
+    titleCell.subtitleColor = MENU_PROPERTY.subtitleColor;
+    menu.addRow(titleRow);
 
     const updateRow = new UITableRow();
     updateRow.dismissOnSelect = MENU_PROPERTY.rowDismiss;
