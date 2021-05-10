@@ -31,28 +31,20 @@ const log = (args) => {
     }
 };
 
-// stuff to display at the bottom of the widget
-const SHOW_USERNAME = true;
-const SHOW_LIKES = true;
-const SHOW_COMMENTS = true;
-
-// pick up to 12 of the most recent posts and
-// select randomly between those. 
-const MAX_RECENT_POSTS = 12;
-
-// desired interval in minutes to refresh the
-// widget. This will only tell IOS that it's
-// ready for a refresh, whether it actually 
-// refreshes is up to IOS
-const REFRESH_INTERVAL = 5; //mins
-
 const ARGUMENTS = {
-    isNeedLogin: isNeedLogin,
-    refreshInterval: REFRESH_INTERVAL,
-    maxRecentPosts: MAX_RECENT_POSTS,
-    showUserName: SHOW_USERNAME,
-    showLikes: SHOW_LIKES,
-    showComments: SHOW_COMMENTS,
+    isNeedLogin: true,
+    // desired interval in minutes to refresh the
+    // widget. This will only tell IOS that it's
+    // ready for a refresh, whether it actually 
+    // refreshes is up to IOS
+    refreshInterval: 5, //mins
+    // pick up to 12 of the most recent posts and
+    // select randomly between those. 
+    maxRecentPosts: 12,
+    // stuff to display at the bottom of the widget
+    showUserName: true,
+    showLikes: true,
+    showComments: true,
     // only show the staus line is any of the
     // status items are visible
     showStatusLine: function () {
@@ -72,8 +64,16 @@ const ARGUMENTS = {
         'nasachandraxray'
     ]
 };
+Object.seal(ARGUMENTS);
 
 // DO NOT EDIT BEYOND THIS LINE ------------------
+
+const MENU_PROPERTY = {
+    rowDismiss: true,
+    rowHeight: 50,
+    subtitleColor: Color.lightGray()
+};
+Object.freeze(MENU_PROPERTY);
 
 const CommonUtil = {
     isNumber: (value) => {
@@ -350,6 +350,9 @@ const InstagramClient = {
         } catch (e) {
             log(e.message);
         }
+    },
+    clearCache: async function () {
+        this.fm.remove(this.root);
     },
     //----------------------------------------------
     presentAlert: async function (prompt = '', items = ['OK'], asSheet = false) {
@@ -656,17 +659,46 @@ if (config.runsInWidget) {
     const widget = post.has_error ? await createErrorWidget(post) : await createWidget(post);
     Script.setWidget(widget);
 } else {
-    const options = ['Small', 'Medium', 'Large', 'Cancel'];
-    const resp = await presentAlert('Preview Widget', options);
+    const menu = new UITable();
+    menu.showSeparators = true;
+    
+    const title = new UITableRow();
+    title.isHeader = true;
+    title.addText('Instagram Latest Widget');
+    menu.addRow(title);
 
-    if (resp === options.length - 1) {
-        return;
+    const previewRow = new UITableRow();
+    previewRow.dismissOnSelect = MENU_PROPERTY.rowDismiss;
+    previewRow.height = MENU_PROPERTY.rowHeight;
+    const previewCell = previewRow.addText('Preview Widget', 'Provides a preview for testing.');
+    previewCell.subtitleColor = MENU_PROPERTY.subtitleColor;
+    previewRow.onSelect = async () => {
+        const options = ['Small', 'Medium', 'Large', 'Cancel'];
+        const resp = await presentAlert('Preview Widget', options);
+
+        if (resp === options.length - 1) {
+            return;
+        }
+
+        const size = options[resp];
+        const widget = post.has_error ? await createErrorWidget(post) : await createWidget(post, size.toLowerCase());
+        
+        await widget[`present${size}`]();
     }
 
-    const size = options[resp];
-    const widget = post.has_error ? await createErrorWidget(post) : await createWidget(post, size.toLowerCase());
-    
-    await widget[`present${size}`]();
+    const cacheRow = new UITableRow();
+    cacheRow.dismissOnSelect = MENU_PROPERTY.rowDismiss;
+    cacheRow.height = MENU_PROPERTY.rowHeight;
+    const cacheCell = cacheRow.addText('Clear cache', 'Clear all caches.');
+    cacheCell.subtitleColor = MENU_PROPERTY.subtitleColor;
+    cacheRow.onSelect = async () => {
+        await InstagramClient.clearCache();
+    }
+
+    menu.addRow(previewRow);
+    menu.addRow(cacheRow);
+
+    await menu.present(false);
 }
 
 Script.complete();
