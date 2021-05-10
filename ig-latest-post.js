@@ -36,10 +36,6 @@ const SHOW_USERNAME = true;
 const SHOW_LIKES = true;
 const SHOW_COMMENTS = true;
 
-// only show the staus line is any of the
-// status items are visible
-const SHOW_STATUS_LINE = SHOW_USERNAME || SHOW_LIKES || SHOW_COMMENTS;
-
 // pick up to 12 of the most recent posts and
 // select randomly between those. 
 const MAX_RECENT_POSTS = 12;
@@ -54,6 +50,14 @@ const ARGUMENTS = {
     isNeedLogin: isNeedLogin,
     refreshInterval: REFRESH_INTERVAL,
     maxRecentPosts: MAX_RECENT_POSTS,
+    showUserName: SHOW_USERNAME,
+    showLikes: SHOW_LIKES,
+    showComments: SHOW_COMMENTS,
+    // only show the staus line is any of the
+    // status items are visible
+    showStatusLine: function () {
+        return this.showUserName || this.showLikes || this.showComments;
+    },
     // The script randomly chooses from this list of
     // users. If a list if users is passed as a 
     // parameter on the widget configuration screen,
@@ -355,12 +359,12 @@ const createWidget = async (data, widgetFamily) => {
     const fontSize = (widgetFamily === 'large') ? 14 : 10;
     const img = await download('Image', data.display_url);
     const widget = new ListWidget();
-    widget.refreshAfterDate = new Date((Date.now() + (1000 * 60 * ARGUMENTS.maxRecentPosts)));
+    widget.refreshAfterDate = new Date((Date.now() + (1000 * 60 * ARGUMENTS.refreshInterval)));
     widget.url = `https://www.instagram.com/p/${data.shortcode}`;
     widget.setPadding(padding, padding, padding, padding);
     widget.backgroundImage = img;
 
-    if (SHOW_STATUS_LINE) {
+    if (ARGUMENTS.showStatusLine) {
         // add gradient with a semi-transparent 
         // dark section at the bottom. this helps
         // with the readability of the status line
@@ -375,19 +379,19 @@ const createWidget = async (data, widgetFamily) => {
         stats.centerAlignContent();
         stats.spacing = 3;
 
-        if (SHOW_USERNAME) {
+        if (ARGUMENTS.showUserName) {
             const eUsr = addText(stats, `@${data.username}`,'left', fontSize);
         }
 
         // center spacer to push items to the sides
         stats.addSpacer();
 
-        if (SHOW_LIKES) {
+        if (ARGUMENTS.showLikes) {
             const heart = addSymbol(stats, 'heart.fill', fontSize);
             const eLikes = addText(stats, abbreviateNumber(data.likes), 'right', fontSize);
         }
 
-        if (SHOW_COMMENTS) {
+        if (ARGUMENTS.showComments) {
             const msg = addSymbol(stats, 'message.fill', fontSize);
             const eComm = addText(stats, abbreviateNumber(data.comments), 'right', fontSize);
         }
@@ -556,11 +560,33 @@ const checkWidgetParameter = () => {
         const aWidgetParameter = args.widgetParameter.split(/\s*\|\s*/);
 
         switch (aWidgetParameter.length) {
+            case 4:
+                const showColumns = aWidgetParameter[3].split(/\s*,\s*/);
+
+                showColumns.forEach((column, index) => {
+                    let key = undefined;
+
+                    switch (index) {
+                        case 2:
+                            key = 'showComments';
+                            break;
+                        case 1:
+                            key = 'showLikes';
+                            break;
+                        default:
+                            key = 'showUserName';
+                            break;
+                    }
+
+                    if (!!key) {
+                        ARGUMENTS[key] = (column === 'true');
+                    }
+                });
             case 3:
                 const maxRecentPosts = aWidgetParameter[2] || ARGUMENTS.maxRecentPosts;
                 ARGUMENTS.maxRecentPosts = CommonUtil.isNumber(maxRecentPosts) ? maxRecentPosts : ARGUMENTS.maxRecentPosts;
             case 2:
-                const refreshInterval = aWidgetParameter[1] || ARGUMENTS.maxRecentPosts;
+                const refreshInterval = aWidgetParameter[1] || ARGUMENTS.refreshInterval;
                 ARGUMENTS.refreshInterval = CommonUtil.isNumber(refreshInterval) ? refreshInterval : ARGUMENTS.refreshInterval;
             case 1:
             default:
