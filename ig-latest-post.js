@@ -31,23 +31,6 @@ const log = (args) => {
     }
 };
 
-const ARGUMENTS = {
-    isNeedLogin: isNeedLogin,
-    // The script randomly chooses from this list of
-    // users. If a list if users is passed as a 
-    // parameter on the widget configuration screen,
-    // it uses those instead. The list of users in the 
-    // configuration screen must be comma-separated
-    users: [
-        'beautifuldestinations',
-        'natgeotravel',
-        'igersmanila',
-        'cntraveler',
-        'the_philippines',
-        'nasachandraxray'
-    ]
-};
-
 // stuff to display at the bottom of the widget
 const SHOW_USERNAME = true;
 const SHOW_LIKES = true;
@@ -67,6 +50,24 @@ const MAX_RECENT_POSTS = 12;
 // refreshes is up to IOS
 const REFRESH_INTERVAL = 5; //mins
 
+const ARGUMENTS = {
+    isNeedLogin: isNeedLogin,
+    refreshInterval: REFRESH_INTERVAL,
+    maxRecentPosts: MAX_RECENT_POSTS,
+    // The script randomly chooses from this list of
+    // users. If a list if users is passed as a 
+    // parameter on the widget configuration screen,
+    // it uses those instead. The list of users in the 
+    // configuration screen must be comma-separated
+    users: [
+        'beautifuldestinations',
+        'natgeotravel',
+        'igersmanila',
+        'cntraveler',
+        'the_philippines',
+        'nasachandraxray'
+    ]
+};
 
 // DO NOT EDIT BEYOND THIS LINE ------------------
 
@@ -340,7 +341,7 @@ const createWidget = async (data, widgetFamily) => {
     const fontSize = (widgetFamily === 'large') ? 14 : 10;
     const img = await download('Image', data.display_url);
     const widget = new ListWidget();
-    widget.refreshAfterDate = new Date((Date.now() + (1000 * 60 * REFRESH_INTERVAL)));
+    widget.refreshAfterDate = new Date((Date.now() + (1000 * 60 * ARGUMENTS.maxRecentPosts)));
     widget.url = `https://www.instagram.com/p/${data.shortcode}`;
     widget.setPadding(padding, padding, padding, padding);
     widget.backgroundImage = img;
@@ -541,6 +542,10 @@ const checkWidgetParameter = () => {
         const aWidgetParameter = args.widgetParameter.split(/\s*\|\s*/);
 
         switch (aWidgetParameter.length) {
+            case 3:
+                ARGUMENTS.maxRecentPosts = aWidgetParameter[2] ?? ARGUMENTS.maxRecentPosts;
+            case 2:
+                ARGUMENTS.refreshInterval = aWidgetParameter[1] ?? ARGUMENTS.refreshInterval;
             case 1:
             default:
 
@@ -586,7 +591,7 @@ InstagramClient.initialize();
 
 // choose a random username and fetch for the user
 // information
-const post = await getLatestPost(getRandom(ARGUMENTS.users), MAX_RECENT_POSTS);
+const post = await getLatestPost(getRandom(ARGUMENTS.users), ARGUMENTS.maxRecentPosts);
 
 if (config.runsInWidget) {
     const widget = post.has_error ? await createErrorWidget(post) : await createWidget(post);
