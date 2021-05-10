@@ -358,7 +358,7 @@ const InstagramClient = {
             if (VERSION < latestVersion) {
                 const code = await new Request('https://raw.githubusercontent.com/clauzewitz/scriptable-instagram-widgets/master/ig-latest-post.js').loadString();
                 this.fm.writeString(this.fm.joinPath(this.fm.documentsDirectory(), `${Script.name()}.js`), code);
-                await this.presentAlert(`Update to version ${latestVerion}\nPlease launch the app again.`);
+                await this.presentAlert(`Update to version ${latestVersion}\nPlease launch the app again.`);
             } else {
                 await this.presentAlert(`version ${VERSION} is currently the newest version available.`);
             }
