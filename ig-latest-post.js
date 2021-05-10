@@ -352,14 +352,18 @@ const InstagramClient = {
         this.fm.remove(this.root);
     },
     updateModule: async function () {
-        const latestVersion = await new Request('https://raw.githubusercontent.com/clauzewitz/scriptable-instagram-widgets/master/version').loadString();
+        try {
+            const latestVersion = await new Request('https://raw.githubusercontent.com/clauzewitz/scriptable-instagram-widgets/master/version').loadString();
 
-        if (VERSION < latestVersion){
-            const code = await new Request('https://raw.githubusercontent.com/clauzewitz/scriptable-instagram-widgets/master/ig-latest-post.js').loadString();
-            this.fm.writeString(this.fm.joinPath(this.fm.documentsDirectory(), `${Script.name()}.js`), code);
-            await this.presentAlert('Updating widget.\nPlease launch the app again.');
-
-            return;
+            if (VERSION < latestVersion) {
+                const code = await new Request('https://raw.githubusercontent.com/clauzewitz/scriptable-instagram-widgets/master/ig-latest-post.js').loadString();
+                this.fm.writeString(this.fm.joinPath(this.fm.documentsDirectory(), `${Script.name()}.js`), code);
+                await this.presentAlert(`Update to version ${latestVerion}\nPlease launch the app again.`);
+            } else {
+                await this.presentAlert(`version ${VERSION} is currently the newest version available.`);
+            }
+        } catch (e) {
+            log(e.message);
         }
     },
     //----------------------------------------------
@@ -672,7 +676,7 @@ if (config.runsInWidget) {
     
     const title = new UITableRow();
     title.isHeader = true;
-    title.addText('Instagram Latest Widget');
+    title.addText('Instagram Latest Widget', `version: ${VERSION}`);
     menu.addRow(title);
 
     const updateRow = new UITableRow();
