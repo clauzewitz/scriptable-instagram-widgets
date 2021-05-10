@@ -86,6 +86,16 @@ const CommonUtil = {
         }
     
         return isValid;
+    },
+    compareVersion: function (version1 = '', version2 = '') {
+        version1 = version1.replace(/\./gi, '');
+        version2 = version2.replace(/\./gi, '');
+
+        if (!this.isNumber(version1) || !this.isNumber(version2)) {
+            return false;
+        }
+
+        return version1 < version2;
     }
 };
 
@@ -355,7 +365,7 @@ const InstagramClient = {
         try {
             const latestVersion = await new Request('https://raw.githubusercontent.com/clauzewitz/scriptable-instagram-widgets/master/version').loadString();
 
-            if (VERSION < latestVersion) {
+            if (CommonUtil.compareVersion(VERSION, latestVersion)) {
                 const code = await new Request('https://raw.githubusercontent.com/clauzewitz/scriptable-instagram-widgets/master/ig-latest-post.js').loadString();
                 this.fm.writeString(this.fm.joinPath(this.fm.documentsDirectory(), `${Script.name()}.js`), code);
                 await this.presentAlert(`Update to version ${latestVersion}\nPlease launch the app again.`);
@@ -657,6 +667,49 @@ const abbreviateNumber = (num, fixed) => {
     return e;
 };
 
+const MENU_ROWS = {
+    title: {
+        isHeader: true,
+        title: 'Instagram Latest Widget',
+        subtitle: `version: ${VERSION}`,
+        onSelect: undefined
+    },
+    checkUpdate: {
+        isHeader: false,
+        title: 'Check for Updates',
+        subtitle: 'Check for updates to the latest version.',
+        onSelect: async () => {
+            InstagramClient.updateModule();
+        }
+    },
+    preview: {
+        isHeader: false,
+        title: 'Preview Widget',
+        subtitle: 'Provides a preview for testing.',
+        onSelect: async () => {
+            const options = ['Small', 'Medium', 'Large', 'Cancel'];
+            const resp = await presentAlert('Preview Widget', options);
+    
+            if (resp === options.length - 1) {
+                return;
+            }
+    
+            const size = options[resp];
+            const widget = post.has_error ? await createErrorWidget(post) : await createWidget(post, size.toLowerCase());
+            
+            await widget[`present${size}`]();
+        }
+    },
+    clearCache: {
+        isHeader: false,
+        title: 'Clear cache',
+        subtitle: 'Clear all caches.',
+        onSelect: async () => {
+            await InstagramClient.clearCache();
+        }
+    }
+};
+
 checkWidgetParameter();
 
 // Wisget code -----------------------------------
@@ -673,53 +726,17 @@ if (config.runsInWidget) {
 } else {
     const menu = new UITable();
     menu.showSeparators = true;
-    
-    const titleRow = new UITableRow();
-    titleRow.isHeader = true;
-    const titleCell = titleRow.addText('Instagram Latest Widget', `version: ${VERSION}`);
-    titleCell.subtitleColor = MENU_PROPERTY.subtitleColor;
-    menu.addRow(titleRow);
 
-    const updateRow = new UITableRow();
-    updateRow.dismissOnSelect = MENU_PROPERTY.rowDismiss;
-    updateRow.height = MENU_PROPERTY.rowHeight;
-    const updateCell = updateRow.addText('Check for Updates', 'Check for updates to the latest version.');
-    updateCell.subtitleColor = MENU_PROPERTY.subtitleColor;
-    updateRow.onSelect = async () => {
-        InstagramClient.updateModule();
-    };
-
-    const previewRow = new UITableRow();
-    previewRow.dismissOnSelect = MENU_PROPERTY.rowDismiss;
-    previewRow.height = MENU_PROPERTY.rowHeight;
-    const previewCell = previewRow.addText('Preview Widget', 'Provides a preview for testing.');
-    previewCell.subtitleColor = MENU_PROPERTY.subtitleColor;
-    previewRow.onSelect = async () => {
-        const options = ['Small', 'Medium', 'Large', 'Cancel'];
-        const resp = await presentAlert('Preview Widget', options);
-
-        if (resp === options.length - 1) {
-            return;
-        }
-
-        const size = options[resp];
-        const widget = post.has_error ? await createErrorWidget(post) : await createWidget(post, size.toLowerCase());
-        
-        await widget[`present${size}`]();
-    };
-
-    const cacheRow = new UITableRow();
-    cacheRow.dismissOnSelect = MENU_PROPERTY.rowDismiss;
-    cacheRow.height = MENU_PROPERTY.rowHeight;
-    const cacheCell = cacheRow.addText('Clear cache', 'Clear all caches.');
-    cacheCell.subtitleColor = MENU_PROPERTY.subtitleColor;
-    cacheRow.onSelect = async () => {
-        await InstagramClient.clearCache();
-    };
-
-    menu.addRow(updateRow);
-    menu.addRow(previewRow);
-    menu.addRow(cacheRow);
+    Object.values(MENU_ROWS).forEach((rowInfo) => {
+        const row = new UITableRow();
+        row.isHeader = rowInfo.isHeader;
+        row.dismissOnSelect = MENU_PROPERTY.rowDismiss;
+        row.height = MENU_PROPERTY.rowHeight;
+        const cell = row.addText(rowInfo.title, rowInfo.subtitle);
+        cell.subtitleColor = MENU_PROPERTY.subtitleColor;
+        row.onSelect = rowInfo.onSelect;
+        menu.addRow(row);
+    });
 
     await menu.present(false);
 }
