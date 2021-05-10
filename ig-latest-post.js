@@ -71,6 +71,20 @@ const ARGUMENTS = {
 
 // DO NOT EDIT BEYOND THIS LINE ------------------
 
+const CommonUtil = {
+    isNumber: (value) => {
+        let isValid = false;
+    
+        if (typeof value === 'number') {
+            isValid = true;
+        } else if (typeof value === 'string') {
+            isValid = /^\d{1,}$/.test(value);
+        }
+    
+        return isValid;
+    }
+};
+
 // InstagramClient module ------------------------
 // const InstagramClient = importModule('InstagramClient')
 // EMBED 
@@ -543,9 +557,11 @@ const checkWidgetParameter = () => {
 
         switch (aWidgetParameter.length) {
             case 3:
-                ARGUMENTS.maxRecentPosts = aWidgetParameter[2] ?? ARGUMENTS.maxRecentPosts;
+                const maxRecentPosts = aWidgetParameter[2] || ARGUMENTS.maxRecentPosts;
+                ARGUMENTS.maxRecentPosts = CommonUtil.isNumber(maxRecentPosts) ? maxRecentPosts : ARGUMENTS.maxRecentPosts;
             case 2:
-                ARGUMENTS.refreshInterval = aWidgetParameter[1] ?? ARGUMENTS.refreshInterval;
+                const refreshInterval = aWidgetParameter[1] || ARGUMENTS.maxRecentPosts;
+                ARGUMENTS.refreshInterval = CommonUtil.isNumber(refreshInterval) ? refreshInterval : ARGUMENTS.refreshInterval;
             case 1:
             default:
 
