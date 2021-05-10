@@ -21,9 +21,9 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
+const VERSION = '2.0.2';
 
 const DEBUG = false;
-const isNeedLogin = false;
 const log = (args) => {
 
     if (DEBUG) {
@@ -32,7 +32,7 @@ const log = (args) => {
 };
 
 const ARGUMENTS = {
-    isNeedLogin: true,
+    isNeedLogin: false,
     // desired interval in minutes to refresh the
     // widget. This will only tell IOS that it's
     // ready for a refresh, whether it actually 
@@ -96,18 +96,16 @@ const InstagramClient = {
     //----------------------------------------------
     initialize: function () {
         try {
+            this.USES_ICLOUD = module.filename.includes('Documents/iCloud~');
+            this.fm = this.USES_ICLOUD ? FileManager.iCloud() : FileManager.local();
+            this.root = this.fm.joinPath(this.fm.documentsDirectory(), '/cache/igclient');
+            this.fm.createDirectory(this.root, true);
 
-            if (ARGUMENTS.isNeedLogin) {
-                this.USES_ICLOUD = module.filename.includes('Documents/iCloud~');
-                this.fm = this.USES_ICLOUD ? FileManager.iCloud() : FileManager.local();
-        
+            if (ARGUMENTS.isNeedLogin) {        
                 // track the number of login attempts
                 // so we don't get an infinite login screen
                 this.loginAttempts = 0;
                 this.MAX_ATTEMPTS = 2;
-                
-                this.root = this.fm.joinPath(this.fm.documentsDirectory(), '/cache/igclient');
-                this.fm.createDirectory(this.root, true);
         
                 this.sessionPath = this.fm.joinPath(this.root, 'session.json');
                 this.sessionid = '';
@@ -233,7 +231,6 @@ const InstagramClient = {
             };
     
             try {
-                //var response = await req.loadJSON();
                 const response = await req.loadString();
     
                 log(response);
@@ -353,6 +350,17 @@ const InstagramClient = {
     },
     clearCache: async function () {
         this.fm.remove(this.root);
+    },
+    updateModule: async function () {
+        const latestVersion = await new Request('https://raw.githubusercontent.com/clauzewitz/scriptable-instagram-widgets/master/version').loadString();
+
+        if (VERSION < latestVersion){
+            const code = await new Request('https://raw.githubusercontent.com/clauzewitz/scriptable-instagram-widgets/master/ig-latest-post.js').loadString();
+            this.fm.writeString(this.fm.joinPath(this.fm.documentsDirectory(), `${Script.name()}.js`), code);
+            await this.presentAlert('Updating widget.\nPlease launch the app again.');
+
+            return;
+        }
     },
     //----------------------------------------------
     presentAlert: async function (prompt = '', items = ['OK'], asSheet = false) {
@@ -667,6 +675,15 @@ if (config.runsInWidget) {
     title.addText('Instagram Latest Widget');
     menu.addRow(title);
 
+    const updateRow = new UITableRow();
+    updateRow.dismissOnSelect = MENU_PROPERTY.rowDismiss;
+    updateRow.height = MENU_PROPERTY.rowHeight;
+    const updateCell = updateRow.addText('Check for Updates', 'Check for updates to the latest version.');
+    updateCell.subtitleColor = MENU_PROPERTY.subtitleColor;
+    updateRow.onSelect = async () => {
+        InstagramClient.updateModule();
+    };
+
     const previewRow = new UITableRow();
     previewRow.dismissOnSelect = MENU_PROPERTY.rowDismiss;
     previewRow.height = MENU_PROPERTY.rowHeight;
@@ -684,7 +701,7 @@ if (config.runsInWidget) {
         const widget = post.has_error ? await createErrorWidget(post) : await createWidget(post, size.toLowerCase());
         
         await widget[`present${size}`]();
-    }
+    };
 
     const cacheRow = new UITableRow();
     cacheRow.dismissOnSelect = MENU_PROPERTY.rowDismiss;
@@ -693,8 +710,9 @@ if (config.runsInWidget) {
     cacheCell.subtitleColor = MENU_PROPERTY.subtitleColor;
     cacheRow.onSelect = async () => {
         await InstagramClient.clearCache();
-    }
+    };
 
+    menu.addRow(updateRow);
     menu.addRow(previewRow);
     menu.addRow(cacheRow);
 
