@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.0.2';
+const VERSION = '2.0.3';
 
 const DEBUG = false;
 const log = (args) => {
@@ -88,8 +88,8 @@ const CommonUtil = {
         return isValid;
     },
     compareVersion: function (version1 = '', version2 = '') {
-        version1 = version1.replace(/\./gi, '');
-        version2 = version2.replace(/\./gi, '');
+        version1 = version1.replace(/\.|\s|\r\n|\r|\n/gi, '');
+        version2 = version2.replace(/\.|\s|\r\n|\r|\n/gi, '');
 
         if (!this.isNumber(version1) || !this.isNumber(version2)) {
             return false;
