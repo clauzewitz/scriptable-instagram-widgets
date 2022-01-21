@@ -571,7 +571,17 @@ const getLatestPost = async (username, maxRecent) => {
 
     log(resp);
 
-    if (ARGUMENTS.isNeedLogin) {
+    if (!!resp.graphql) {
+        return {
+            has_error: false,
+            username: username,
+            shortcode: resp.graphql.shortcode_media.shortcode,
+            display_url: resp.graphql.shortcode_media.hasOwnProperty('display_resources') ? resp.graphql.shortcode_media.display_resources[Math.floor(Math.random() * resp.graphql.shortcode_media.display_resources.length)].src : resp.graphql.shortcode_media.display_url,
+            is_video: resp.graphql.shortcode_media.is_video,
+            comments: resp.graphql.shortcode_media.edge_media_preview_comment.count,
+            likes: resp.graphql.shortcode_media.edge_media_preview_like.count
+        };
+    } else {
         let idx = Math.floor(Math.random() * resp.items.length);
 
         return {
@@ -582,16 +592,6 @@ const getLatestPost = async (username, maxRecent) => {
             is_video: resp.items[idx].media_type != 1,
             comments: resp.items[idx].comment_count,
             likes: resp.items[idx].like_count
-        };
-    } else {
-        return {
-            has_error: false,
-            username: username,
-            shortcode: resp.graphql.shortcode_media.shortcode,
-            display_url: resp.graphql.shortcode_media.hasOwnProperty('display_resources') ? resp.graphql.shortcode_media.display_resources[Math.floor(Math.random() * resp.graphql.shortcode_media.display_resources.length)].src : resp.graphql.shortcode_media.display_url,
-            is_video: resp.graphql.shortcode_media.is_video,
-            comments: resp.graphql.shortcode_media.edge_media_preview_comment.count,
-            likes: resp.graphql.shortcode_media.edge_media_preview_like.count
         };
     }
 };
