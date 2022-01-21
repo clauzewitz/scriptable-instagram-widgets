@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.0.3';
+const VERSION = '2.0.4';
 
 const DEBUG = false;
 const log = (args) => {
@@ -571,17 +571,29 @@ const getLatestPost = async (username, maxRecent) => {
 
     log(resp);
 
-    const post = resp.graphql.shortcode_media;
-    
-    return {
-        has_error: false,
-        username: username,
-        shortcode: post.shortcode,
-        display_url: post.hasOwnProperty('display_resources') ? post.display_resources[post.display_resources.length - 1].src : post.display_url,
-        is_video: post.is_video,
-        comments: post.edge_media_preview_comment.count,
-        likes: post.edge_media_preview_like.count
-    };
+    if (ARGUMENTS.isNeedLogin) {
+        let idx = Math.floor(Math.random() * resp.items.length);
+
+        return {
+            has_error: false,
+            username: username,
+            shortcode: resp.items[idx].code,
+            display_url: resp.items[idx].image_versions2.candidates[0].url,
+            is_video: resp.items[idx].media_type != 1,
+            comments: resp.items[idx].comment_count,
+            likes: resp.items[idx].like_count
+        };
+    } else {
+        return {
+            has_error: false,
+            username: username,
+            shortcode: resp.graphql.shortcode_media.shortcode,
+            display_url: resp.graphql.shortcode_media.hasOwnProperty('display_resources') ? resp.graphql.shortcode_media.display_resources[Math.floor(Math.random() * resp.graphql.shortcode_media.display_resources.length)].src : resp.graphql.shortcode_media.display_url,
+            is_video: resp.graphql.shortcode_media.is_video,
+            comments: resp.graphql.shortcode_media.edge_media_preview_comment.count,
+            likes: resp.graphql.shortcode_media.edge_media_preview_like.count
+        };
+    }
 };
 
 //------------------------------------------------
