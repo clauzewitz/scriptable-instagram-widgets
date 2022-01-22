@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.0.4';
+const VERSION = '2.0.5';
 
 const DEBUG = false;
 const log = (args) => {
@@ -32,7 +32,7 @@ const log = (args) => {
 };
 
 const ARGUMENTS = {
-    isNeedLogin: false,
+    isNeedLogin: true,
     // desired interval in minutes to refresh the
     // widget. This will only tell IOS that it's
     // ready for a refresh, whether it actually 
@@ -583,15 +583,17 @@ const getLatestPost = async (username, maxRecent) => {
         };
     } else {
         let idx = Math.floor(Math.random() * resp.items.length);
+        let item = resp.items[idx];
+        let mediaInfo = (item.media_type == 8) ? item.carousel_media[Math.floor(Math.random() * item.carousel_media_count)].image_versions2 : item.image_versions2;
 
         return {
             has_error: false,
             username: username,
-            shortcode: resp.items[idx].code,
-            display_url: resp.items[idx].image_versions2.candidates[0].url,
-            is_video: resp.items[idx].media_type != 1,
-            comments: resp.items[idx].comment_count,
-            likes: resp.items[idx].like_count
+            shortcode: item.code,
+            display_url: mediaInfo.candidates[0].url,
+            is_video: item.media_type == 2,
+            comments: item.comment_count,
+            likes: item.like_count
         };
     }
 };
