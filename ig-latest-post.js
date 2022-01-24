@@ -248,7 +248,7 @@ const InstagramClient = {
 
             log(response);
 
-            return JSON.parse(response);
+            return response;
         } catch (e) {
             log(e.message);
             throw new Error(e.message);
