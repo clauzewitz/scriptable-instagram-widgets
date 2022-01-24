@@ -122,6 +122,7 @@ const InstagramClient = {
             }
         } catch (e) {
             log(e.message);
+            throw new Error(e.message);
         }
     },
     //----------------------------------------------
@@ -181,6 +182,7 @@ const InstagramClient = {
             return undefined;
         } catch (e) {
             log(e.message);
+            throw new Error(e.message);
         }
     },
     //----------------------------------------------
@@ -201,6 +203,7 @@ const InstagramClient = {
             //await webview.present(false);
         } catch (e) {
             log(e.message);
+            throw new Error(e.message);
         }
     },
     //----------------------------------------------
@@ -228,29 +231,27 @@ const InstagramClient = {
             return null;
         } catch (e) {
             log(e.message);
+            throw new Error(e.message);
         }
     },
     //----------------------------------------------
     fetchData: async function (url) {
-        try {
-            log(`fetching ${url}`);
+        log(`fetching ${url}`);
 
-            const req = new Request(url);        
-            req.headers = {
-                Cookie: `${await this.getCookies()}`
-            };
-    
-            try {
-                const response = await req.loadString();
-    
-                log(response);
-    
-                return JSON.parse(response);
-            } catch (e) {
-                throw new Error(e.message);
-            }
+        const req = new Request(url);        
+        req.headers = {
+            Cookie: `${await this.getCookies()}`
+        };
+
+        try {
+            const response = await req.loadJSON();
+
+            log(response);
+
+            return JSON.parse(response);
         } catch (e) {
             log(e.message);
+            throw new Error(e.message);
         }
     },
     //----------------------------------------------
@@ -265,6 +266,7 @@ const InstagramClient = {
             return response.graphql.user;
         } catch (e) {
             log(e.message);
+            throw new Error(e.message);
         }
     },
     //----------------------------------------------
@@ -279,6 +281,7 @@ const InstagramClient = {
             return response;
         } catch (e) {
             log(e.message);
+            throw new Error(e.message);
         }
     },
     //----------------------------------------------
@@ -316,6 +319,7 @@ const InstagramClient = {
             return undefined;
         } catch (e) {
             log(e.message);
+            throw new Error(e.message);
         }
     },
     //----------------------------------------------
@@ -335,6 +339,7 @@ const InstagramClient = {
             }
         } catch (e) {
             log(e.message);
+            throw new Error(e.message);
         }
     },
     getCookies: async function () {
