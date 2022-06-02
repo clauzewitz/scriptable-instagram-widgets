@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.0.5';
+const VERSION = '2.0.6';
 
 const DEBUG = false;
 const log = (args) => {
@@ -32,6 +32,7 @@ const log = (args) => {
 };
 
 const ARGUMENTS = {
+    appId: '936619743392459',
     isNeedLogin: true,
     // desired interval in minutes to refresh the
     // widget. This will only tell IOS that it's
@@ -186,7 +187,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-	logout: async function () {
+    logout: async function () {
         try {
             log(`session exists - ${this.fm.fileExists(this.sessionPath)}`);
 
@@ -235,11 +236,12 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    fetchData: async function (url) {
-        log(`fetching ${url}`);
+    fetchData: async function (uri) {
+        log(`fetching ${uri}`);
 
-        const req = new Request(url);        
+        const req = new Request(`https://i.instagram.com/api/v1${uri}`);        
         req.headers = {
+	    'X-IG-App-ID': ARGUMENTS.appId,
             Cookie: `${await this.getCookies()}`
         };
 
@@ -257,22 +259,22 @@ const InstagramClient = {
     //----------------------------------------------
     getUserInfo: async function (username) {
         try {
-            const response = await this.fetchData(`https://www.instagram.com/${username}/?__a=1`);
+            const response = await this.fetchData(`/users/web_profile_info/?username=${username}`);
         
             if (Object.keys(response).length === 0) {
                 throw new Error(`Invalid user - ${username}`);
             }
 
-            return response.graphql.user;
+            return response.data.user;
         } catch (e) {
             log(e.message);
             throw new Error(e.message);
         }
     },
     //----------------------------------------------
-    getPostInfo: async function (shortcode) {
+    getPostInfo: async function (postId) {
         try {
-            const response = await this.fetchData(`https://www.instagram.com/p/${shortcode}/?__a=1`)
+            const response = await this.fetchData(`/media/${postId}/info`)
         
             if (Object.keys(response).length === 0) {
                 throw new Error(`Invalid post`);
@@ -557,12 +559,12 @@ const getLatestPost = async (username, maxRecent) => {
     let resp = undefined;
 
     try {
-        resp = await InstagramClient.getPostInfo(rec.shortcode);
+        resp = await InstagramClient.getPostInfo(rec.id);
 
         if (!resp) {
             return {
                 has_error: true,
-                message: `not responded post\n${rec.shortcode}`
+                message: `not responded post\n${rec.id}`
             };
         }
     } catch(e) {
