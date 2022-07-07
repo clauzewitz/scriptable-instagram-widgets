@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.0.6';
+const VERSION = '2.0.7';
 
 const DEBUG = false;
 const log = (args) => {
@@ -409,7 +409,8 @@ const createWidget = async (data, widgetFamily) => {
     const img = await download('Image', data.display_url);
     const widget = new ListWidget();
     widget.refreshAfterDate = new Date((Date.now() + (1000 * 60 * ARGUMENTS.refreshInterval)));
-    widget.url = `https://www.instagram.com/p/${data.shortcode}`;
+//    widget.url = `https://www.instagram.com/p/${data.shortcode}`;
+    widget.url = data.display_url;
     widget.setPadding(padding, padding, padding, padding);
     widget.backgroundImage = img;
 
@@ -597,7 +598,7 @@ const getLatestPost = async (username, maxRecent) => {
             has_error: false,
             username: username,
             shortcode: item.code,
-            display_url: mediaInfo.candidates[0].url,
+            display_url: mediaInfo.candidates.sort((a, b) => b.width - a.width)[0].url,
             is_video: item.media_type == 2,
             comments: item.comment_count,
             likes: item.like_count
