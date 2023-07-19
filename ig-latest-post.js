@@ -1,6 +1,3 @@
-// Variables used by Scriptable.
-// These must be at the very top of the file. Do not edit.
-// icon-color: red; icon-glyph: camera-retro;
 /* -----------------------------------------------
 Script      : ig-latest-post.js
 Author      : me@supermamon.com
@@ -21,7 +18,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.0.7';
+const VERSION = '2.0.8';
 
 const DEBUG = false;
 const log = (args) => {
@@ -110,7 +107,9 @@ const InstagramClient = {
             this.USES_ICLOUD = module.filename.includes('Documents/iCloud~');
             this.fm = this.USES_ICLOUD ? FileManager.iCloud() : FileManager.local();
             this.root = this.fm.joinPath(this.fm.documentsDirectory(), '/cache/igclient');
+            this.imageRoot = this.fm.joinPath(this.root, '/images');
             this.fm.createDirectory(this.root, true);
+            this.fm.createDirectory(this.imageRoot, true)
 
             if (ARGUMENTS.isNeedLogin) {        
                 // track the number of login attempts
@@ -120,7 +119,7 @@ const InstagramClient = {
         
                 this.sessionPath = this.fm.joinPath(this.root, 'session.json');
                 this.sessionid = '';
-            }
+            } 
         } catch (e) {
             log(e.message);
             throw new Error(e.message);
@@ -296,10 +295,10 @@ const InstagramClient = {
                 if (this.fm.fileExists(this.sessionPath)) {
                     log(`file found`);
         
-                    if (this.USES_ICLOUD) {
+        			if (this.USES_ICLOUD) {
                         await this.fm.downloadFileFromiCloud(this.sessionPath);
                     }
-        
+                    
                     log(`reading session file`);
                 
                     const result = await this.fm.read(this.sessionPath);
@@ -331,10 +330,7 @@ const InstagramClient = {
             if (ARGUMENTS.isNeedLogin) {
 
                 if (this.fm.fileExists(this.sessionPath)) {
-
-                    if (this.USES_ICLOUD) {
-                        await this.fm.downloadFileFromiCloud(this.sessionPath);
-                    }
+                    await this.fm.remove(this.sessionPath);
                 }
         
                 await this.fm.writeString(this.sessionPath, JSON.stringify(json));
@@ -342,6 +338,21 @@ const InstagramClient = {
         } catch (e) {
             log(e.message);
             throw new Error(e.message);
+        }
+    },
+    saveImage: async function (image, imageUrl) {
+        const regex = /(\d{1,}_\d{1,}_\d{1,}_n.jpg)/gi;
+    	this.fm.writeImage(this.fm.joinPath(this.imageRoot, regex.exec(imageUrl)[0]), image);
+    },
+    readImage: async function () {
+        const files = this.fm.listContents(this.imageRoot);
+	    
+        if (files.length > 0) {
+            const filePath = this.fm.joinPath(this.imageRoot, getRandom(files));
+            await this.fm.downloadFileFromiCloud(filePath);
+            return this.fm.readImage(filePath);
+        } else {
+            throw new Error("Not Found Image");
         }
     },
     getCookies: async function () {
@@ -407,6 +418,9 @@ const createWidget = async (data, widgetFamily) => {
     const padding = (widgetFamily === 'large') ? 12 : 10;
     const fontSize = (widgetFamily === 'large') ? 14 : 10;
     const img = await download('Image', data.display_url);
+	
+    InstagramClient.saveImage(img, data.display_url);
+    
     const widget = new ListWidget();
     widget.refreshAfterDate = new Date((Date.now() + (1000 * 60 * ARGUMENTS.refreshInterval)));
 //    widget.url = `https://www.instagram.com/p/${data.shortcode}`;
@@ -487,15 +501,21 @@ const newLinearGradient = (hexcolors, locations) => {
 //------------------------------------------------
 const createErrorWidget = async (data) => {
     const widget = new ListWidget();
-    widget.addSpacer();
+    
+    try {
+        widget.backgroundImage = await InstagramClient.readImage();
+    } catch (e) {
+        console.log(e);
+        widget.addSpacer();
 
-    log(data.message);
+    	log(data.message);
 
-    const text = widget.addText(data.message);
-    text.textColor = Color.white();
-    text.centerAlignText();
+	const text = widget.addText(data.message);
+	text.textColor = Color.white();
+	text.centerAlignText();
 
-    widget.addSpacer();
+	widget.addSpacer();
+    }
 
     return widget;
 };
