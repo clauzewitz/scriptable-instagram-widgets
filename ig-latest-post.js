@@ -18,7 +18,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.0.8';
+const VERSION = '2.0.9';
 
 const DEBUG = false;
 const log = (args) => {
@@ -129,7 +129,7 @@ const InstagramClient = {
     authenticate: async function () {
         try {
 
-            if (ARGUMENTS.isNeedLogin) {
+            if (!config.runsInWidget && ARGUMENTS.isNeedLogin) {
                 const url = 'https://instagram.com/';
                 const req = new Request(url);
                 const result = {};
@@ -225,10 +225,8 @@ const InstagramClient = {
                     this.sessionid = sessionCache.sessionid;
                 }
         
-                return (sessionCache) ? this : null;
+                return (sessionCache) ? this : new Error(e.message);
             }
-
-            return null;
         } catch (e) {
             log(e.message);
             throw new Error(e.message);
@@ -316,7 +314,6 @@ const InstagramClient = {
                     }
                 }
             }
-        
             return undefined;
         } catch (e) {
             log(e.message);
@@ -338,6 +335,11 @@ const InstagramClient = {
         } catch (e) {
             log(e.message);
             throw new Error(e.message);
+        }
+    },
+    removeSession: async function () {
+        if (this.fm.fileExists(this.sessionPath)) {
+            this.fm.remove(this.sessionPath);
         }
     },
     saveImage: async function (image, imageUrl) {
@@ -500,12 +502,13 @@ const newLinearGradient = (hexcolors, locations) => {
 
 //------------------------------------------------
 const createErrorWidget = async (data) => {
+    InstagramClient.removeSession();
+    
     const widget = new ListWidget();
     
     try {
         widget.backgroundImage = await InstagramClient.readImage();
     } catch (e) {
-        console.log(e);
         widget.addSpacer();
 
     	log(data.message);
