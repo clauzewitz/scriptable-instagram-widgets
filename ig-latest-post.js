@@ -18,7 +18,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.0.9';
+const VERSION = '2.0.10';
 
 const DEBUG = false;
 const log = (args) => {
@@ -343,8 +343,8 @@ const InstagramClient = {
         }
     },
     saveImage: async function (image, imageUrl) {
-        const regex = /(\d{1,}_\d{1,}_\d{1,}_n.jpg)/gi;
-    	this.fm.writeImage(this.fm.joinPath(this.imageRoot, regex.exec(imageUrl)[0]), image);
+        const regex = /(\d{1,}_\d{1,}_\d{1,}_n)/gi;
+    	this.fm.writeImage(this.fm.joinPath(this.imageRoot, `${regex.exec(imageUrl)[0]}.jpg`), image);
     },
     readImage: async function () {
         const files = this.fm.listContents(this.imageRoot);
