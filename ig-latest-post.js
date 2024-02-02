@@ -18,9 +18,9 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.0.10';
+const VERSION = '2.1.0';
 
-const DEBUG = false;
+const DEBUG = true;
 const log = (args) => {
 
     if (DEBUG) {
@@ -54,12 +54,12 @@ const ARGUMENTS = {
     // it uses those instead. The list of users in the 
     // configuration screen must be comma-separated
     users: [
-        'beautifuldestinations',
-        'natgeotravel',
-        'igersmanila',
-        'cntraveler',
-        'the_philippines',
-        'nasachandraxray'
+         'beautifuldestinations',
+         'natgeotravel',
+         'igersmanila',
+         'cntraveler',
+         'the_philippines',
+         'nasachandraxray'
     ]
 };
 Object.seal(ARGUMENTS);
@@ -236,7 +236,7 @@ const InstagramClient = {
     fetchData: async function (uri) {
         log(`fetching ${uri}`);
 
-        const req = new Request(`https://i.instagram.com/api/v1${uri}`);        
+        const req = new Request(`https://www.instagram.com/api/v1${uri}`);        
         req.headers = {
 	    'X-IG-App-ID': ARGUMENTS.appId,
             Cookie: `${await this.getCookies()}`
@@ -256,27 +256,12 @@ const InstagramClient = {
     //----------------------------------------------
     getUserInfo: async function (username) {
         try {
-            const response = await this.fetchData(`/users/web_profile_info/?username=${username}`);
+            const response = await this.fetchData(`/feed/user/${username}/username/?count=${ARGUMENTS.maxRecentPosts}`);
         
             if (Object.keys(response).length === 0) {
                 throw new Error(`Invalid user - ${username}`);
             }
 
-            return response.data.user;
-        } catch (e) {
-            log(e.message);
-            throw new Error(e.message);
-        }
-    },
-    //----------------------------------------------
-    getPostInfo: async function (postId) {
-        try {
-            const response = await this.fetchData(`/media/${postId}/info`)
-        
-            if (Object.keys(response).length === 0) {
-                throw new Error(`Invalid post`);
-            }
-            
             return response;
         } catch (e) {
             log(e.message);
@@ -425,7 +410,6 @@ const createWidget = async (data, widgetFamily) => {
     
     const widget = new ListWidget();
     widget.refreshAfterDate = new Date((Date.now() + (1000 * 60 * ARGUMENTS.refreshInterval)));
-//    widget.url = `https://www.instagram.com/p/${data.shortcode}`;
     widget.url = data.display_url;
     widget.setPadding(padding, padding, padding, padding);
     widget.backgroundImage = img;
@@ -531,7 +515,7 @@ const download = async (dType, url) => {
 };
 
 //------------------------------------------------
-const getLatestPost = async (username, maxRecent) => {
+const getLatestPost = async (username) => {
     try {
 
         if (ARGUMENTS.isNeedLogin) {
@@ -558,6 +542,8 @@ const getLatestPost = async (username, maxRecent) => {
             message: e.message
         };
     }
+    
+    console.log(user);
 
     if (!user) {
         return {
@@ -566,67 +552,19 @@ const getLatestPost = async (username, maxRecent) => {
         };
     }
 
-    if (user.is_private && !user.followed_by_viewer) { 
-        return {
-            has_error: true,
-            message: `not following user\n${username}`
-        };
-    }
+    let idx = Math.floor(Math.random() * user.items.length);
+    let item = user.items[idx];
+    let mediaInfo = item.image_versions2;
 
-    maxRecent = maxRecent > 12 ? 12 : maxRecent;
-    let idx = Math.floor(Math.random() * maxRecent);
-    const visible_posts = user.edge_owner_to_timeline_media.edges.length - 1;
-
-    idx =  visible_posts < idx ? visible_posts : idx;
-
-    const rec = user.edge_owner_to_timeline_media.edges[idx].node;
-    let resp = undefined;
-
-    try {
-        resp = await InstagramClient.getPostInfo(rec.id);
-
-        if (!resp) {
-            return {
-                has_error: true,
-                message: `not responded post\n${rec.id}`
-            };
-        }
-    } catch(e) {
-        log(`error encountered when getting post - ${e.message}`);
-
-        return {
-            has_error: true,
-            message: e.message
-        };
-    }
-
-    log(resp);
-
-    if (!!resp.graphql) {
-        return {
-            has_error: false,
-            username: username,
-            shortcode: resp.graphql.shortcode_media.shortcode,
-            display_url: resp.graphql.shortcode_media.hasOwnProperty('display_resources') ? resp.graphql.shortcode_media.display_resources[Math.floor(Math.random() * resp.graphql.shortcode_media.display_resources.length)].src : resp.graphql.shortcode_media.display_url,
-            is_video: resp.graphql.shortcode_media.is_video,
-            comments: resp.graphql.shortcode_media.edge_media_preview_comment.count,
-            likes: resp.graphql.shortcode_media.edge_media_preview_like.count
-        };
-    } else {
-        let idx = Math.floor(Math.random() * resp.items.length);
-        let item = resp.items[idx];
-        let mediaInfo = (item.media_type == 8) ? item.carousel_media[Math.floor(Math.random() * item.carousel_media_count)].image_versions2 : item.image_versions2;
-
-        return {
-            has_error: false,
-            username: username,
-            shortcode: item.code,
-            display_url: mediaInfo.candidates.sort((a, b) => b.width - a.width)[0].url,
-            is_video: item.media_type == 2,
-            comments: item.comment_count,
-            likes: item.like_count
-        };
-    }
+    return {
+        has_error: false,
+        username: username,
+        shortcode: item.pk,
+        display_url: mediaInfo.candidates.sort((a, b) => b.width - a.width)[0].url,
+        is_video: item.media_type == 2,
+        comments: item.comment_count,
+        likes: item.like_count
+    };
 };
 
 //------------------------------------------------
@@ -763,7 +701,7 @@ InstagramClient.initialize();
 
 // choose a random username and fetch for the user
 // information
-const post = await getLatestPost(getRandom(ARGUMENTS.users), ARGUMENTS.maxRecentPosts);
+const post = await getLatestPost(getRandom(ARGUMENTS.users));
 
 if (config.runsInWidget) {
     const widget = post.has_error ? await createErrorWidget(post) : await createWidget(post);
