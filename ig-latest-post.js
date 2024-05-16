@@ -1,3 +1,6 @@
+// Variables used by Scriptable.
+// These must be at the very top of the file. Do not edit.
+// icon-color: red; icon-glyph: camera-retro;
 /* -----------------------------------------------
 Script      : ig-latest-post.js
 Author      : me@supermamon.com
@@ -18,9 +21,9 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.1.0';
+const VERSION = '2.1.1';
 
-const DEBUG = true;
+const DEBUG = false;
 const log = (args) => {
 
     if (DEBUG) {
@@ -54,12 +57,12 @@ const ARGUMENTS = {
     // it uses those instead. The list of users in the 
     // configuration screen must be comma-separated
     users: [
-         'beautifuldestinations',
-         'natgeotravel',
-         'igersmanila',
-         'cntraveler',
-         'the_philippines',
-         'nasachandraxray'
+        'beautifuldestinations',
+        'natgeotravel',
+        'igersmanila',
+        'cntraveler',
+        'the_philippines',
+        'nasachandraxray'
     ]
 };
 Object.seal(ARGUMENTS);
@@ -95,6 +98,13 @@ const CommonUtil = {
 
         return version1 < version2;
     }
+};
+
+const isOnline = async () => {
+    const webView = new WebView();
+    await webView.loadURL('about:blank');
+    
+    return await webView.evaluateJavaScript('navigator.onLine');
 };
 
 // InstagramClient module ------------------------
@@ -238,7 +248,7 @@ const InstagramClient = {
 
         const req = new Request(`https://www.instagram.com/api/v1${uri}`);        
         req.headers = {
-	    'X-IG-App-ID': ARGUMENTS.appId,
+            'X-IG-App-ID': ARGUMENTS.appId,
             Cookie: `${await this.getCookies()}`
         };
 
@@ -278,7 +288,7 @@ const InstagramClient = {
                 if (this.fm.fileExists(this.sessionPath)) {
                     log(`file found`);
         
-        			if (this.USES_ICLOUD) {
+                 if (this.USES_ICLOUD) {
                         await this.fm.downloadFileFromiCloud(this.sessionPath);
                     }
                     
@@ -329,11 +339,11 @@ const InstagramClient = {
     },
     saveImage: async function (image, imageUrl) {
         const regex = /(\d{1,}_\d{1,}_\d{1,}_n)/gi;
-    	this.fm.writeImage(this.fm.joinPath(this.imageRoot, `${regex.exec(imageUrl)[0]}.jpg`), image);
+        this.fm.writeImage(this.fm.joinPath(this.imageRoot, `${regex.exec(imageUrl)[0]}.jpg`), image);
     },
     readImage: async function () {
         const files = this.fm.listContents(this.imageRoot);
-	    
+       
         if (files.length > 0) {
             const filePath = this.fm.joinPath(this.imageRoot, getRandom(files));
             await this.fm.downloadFileFromiCloud(filePath);
@@ -400,16 +410,91 @@ const InstagramClient = {
 // InstagramClient module ends -------------------
 
 //------------------------------------------------
+const getLatestPost = async (username) => {
+    let user = undefined;
+
+    try {
+        user = await InstagramClient.getUserInfo(username);
+    } catch (e) {
+        log(`error encountered - ${e.message}`);
+
+        return {
+            has_error: true,
+            message: e.message
+        };
+    }
+
+    console.log(user);
+
+    if (!user || !user.items) {
+        return {
+            has_error: true,
+            message: `not exists user\n${username}`
+        };
+    }
+
+    let idx = Math.floor(Math.random() * user.items.length);
+    let item = user.items[idx];
+    let mediaInfo = item.image_versions2;
+
+    return {
+        has_error: false,
+        username: username,
+        shortcode: item.pk,
+        display_url: mediaInfo.candidates.sort((a, b) => b.width - a.width)[0].url,
+        is_video: item.media_type == 2,
+        comments: item.comment_count,
+        likes: item.like_count
+    };
+};
+
+//------------------------------------------------
+const createTempWidget = async () => {
+    const widget = new ListWidget();
+    widget.backgroundImage = await InstagramClient.readImage();
+
+    return widget;
+};
+
+//------------------------------------------------
+const createErrorWidget = async (data) => {
+    InstagramClient.removeSession();
+    
+    try {
+        return await createTempWidget();
+    } catch (e) {
+        const widget = new ListWidget();
+        widget.addSpacer();
+
+		log(data.message);
+
+		const text = widget.addText(data.message);
+		text.textColor = Color.white();
+		text.centerAlignText();
+
+		widget.addSpacer();
+
+        return widget;
+    }
+};
+
+//------------------------------------------------
 const createWidget = async (data, widgetFamily) => {
+
+    if (data.has_error) {
+        return await createErrorWidget(data);
+    }
+
     widgetFamily = widgetFamily || config.widgetFamily;
     const padding = (widgetFamily === 'large') ? 12 : 10;
     const fontSize = (widgetFamily === 'large') ? 14 : 10;
     const img = await download('Image', data.display_url);
-	
+   
     InstagramClient.saveImage(img, data.display_url);
     
     const widget = new ListWidget();
     widget.refreshAfterDate = new Date((Date.now() + (1000 * 60 * ARGUMENTS.refreshInterval)));
+//    widget.url = `https://www.instagram.com/p/${data.shortcode}`;
     widget.url = data.display_url;
     widget.setPadding(padding, padding, padding, padding);
     widget.backgroundImage = img;
@@ -485,29 +570,6 @@ const newLinearGradient = (hexcolors, locations) => {
 };
 
 //------------------------------------------------
-const createErrorWidget = async (data) => {
-    InstagramClient.removeSession();
-    
-    const widget = new ListWidget();
-    
-    try {
-        widget.backgroundImage = await InstagramClient.readImage();
-    } catch (e) {
-        widget.addSpacer();
-
-    	log(data.message);
-
-	const text = widget.addText(data.message);
-	text.textColor = Color.white();
-	text.centerAlignText();
-
-	widget.addSpacer();
-    }
-
-    return widget;
-};
-
-//------------------------------------------------
 const download = async (dType, url) => {
     const req = new Request(url);
 
@@ -515,57 +577,16 @@ const download = async (dType, url) => {
 };
 
 //------------------------------------------------
-const getLatestPost = async (username) => {
-    try {
+const createLatestPostWidget = async (username, widgetFamily) => {
 
-        if (ARGUMENTS.isNeedLogin) {
-            await InstagramClient.startSession();
-        }
-    } catch (e) {
-        log(`error encountered - ${e.message}`);
+    if (await isOnline()) {
+        const post = await getLatestPost(username, widgetFamily);
 
-        return {
-            has_error: true,
-            message: e.message
-        };
+        return await createWidget(post);
     }
 
-    let user = undefined;
-
-    try {
-        user = await InstagramClient.getUserInfo(username);
-    } catch(e) {
-        log(`error encountered - ${e.message}`);
-
-        return {
-            has_error: true,
-            message: e.message
-        };
-    }
-    
-    console.log(user);
-
-    if (!user) {
-        return {
-            has_error: true,
-            message: `not exists user\n${username}`
-        };
-    }
-
-    let idx = Math.floor(Math.random() * user.items.length);
-    let item = user.items[idx];
-    let mediaInfo = item.image_versions2;
-
-    return {
-        has_error: false,
-        username: username,
-        shortcode: item.pk,
-        display_url: mediaInfo.candidates.sort((a, b) => b.width - a.width)[0].url,
-        is_video: item.media_type == 2,
-        comments: item.comment_count,
-        likes: item.like_count
-    };
-};
+    return await createTempWidget();
+}
 
 //------------------------------------------------
 const presentAlert = async (prompt, items, asSheet) => {
@@ -670,6 +691,11 @@ const MENU_ROWS = {
         title: 'Preview Widget',
         subtitle: 'Provides a preview for testing.',
         onSelect: async () => {
+            
+            if (ARGUMENTS.isNeedLogin) {
+                await InstagramClient.startSession();
+            }
+
             const options = ['Small', 'Medium', 'Large', 'Cancel'];
             const resp = await presentAlert('Preview Widget', options);
     
@@ -678,7 +704,7 @@ const MENU_ROWS = {
             }
     
             const size = options[resp];
-            const widget = post.has_error ? await createErrorWidget(post) : await createWidget(post, size.toLowerCase());
+            const widget = await createLatestPostWidget(getRandom(ARGUMENTS.users), size.toLowerCase());
             
             await widget[`present${size}`]();
         }
@@ -688,7 +714,7 @@ const MENU_ROWS = {
         title: 'Clear cache',
         subtitle: 'Clear all caches.',
         onSelect: async () => {
-            await InstagramClient.clearCache();
+            await InstagramClient.removeSession();
         }
     }
 };
@@ -701,11 +727,9 @@ InstagramClient.initialize();
 
 // choose a random username and fetch for the user
 // information
-const post = await getLatestPost(getRandom(ARGUMENTS.users));
 
 if (config.runsInWidget) {
-    const widget = post.has_error ? await createErrorWidget(post) : await createWidget(post);
-    Script.setWidget(widget);
+    Script.setWidget(await createLatestPostWidget(getRandom(ARGUMENTS.users)));
 } else {
     const menu = new UITable();
     menu.showSeparators = true;
