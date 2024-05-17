@@ -57,13 +57,12 @@ const ARGUMENTS = {
     // it uses those instead. The list of users in the 
     // configuration screen must be comma-separated
     users: [
-        //'beautifuldestinations',
-        //'natgeotravel',
-        //'igersmanila',
-        //'cntraveler',
-        //'the_philippines',
-        //'nasachandraxray'
-        'official.kep1er'
+        'beautifuldestinations',
+        'natgeotravel',
+        'igersmanila',
+        'cntraveler',
+        'the_philippines',
+        'nasachandraxray'
     ]
 };
 Object.seal(ARGUMENTS);
