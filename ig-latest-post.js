@@ -1,6 +1,6 @@
 // Variables used by Scriptable.
 // These must be at the very top of the file. Do not edit.
-// icon-color: red; icon-glyph: camera-retro;
+// icon-color: yellow icon-glyph: camera-retro;
 /* -----------------------------------------------
 Script      : ig-latest-post.js
 Author      : me@supermamon.com
@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.1.1';
+const VERSION = '2.1.2';
 
 const DEBUG = false;
 const log = (args) => {
@@ -57,12 +57,13 @@ const ARGUMENTS = {
     // it uses those instead. The list of users in the 
     // configuration screen must be comma-separated
     users: [
-        'beautifuldestinations',
-        'natgeotravel',
-        'igersmanila',
-        'cntraveler',
-        'the_philippines',
-        'nasachandraxray'
+        //'beautifuldestinations',
+        //'natgeotravel',
+        //'igersmanila',
+        //'cntraveler',
+        //'the_philippines',
+        //'nasachandraxray'
+        'official.kep1er'
     ]
 };
 Object.seal(ARGUMENTS);
@@ -103,6 +104,8 @@ const CommonUtil = {
 const isOnline = async () => {
     const webView = new WebView();
     await webView.loadURL('about:blank');
+    
+    log(await webView.evaluateJavaScript('navigator.onLine'));
     
     return await webView.evaluateJavaScript('navigator.onLine');
 };
@@ -226,9 +229,16 @@ const InstagramClient = {
                 if (sessionCache) {
                     log(`cached sessionid ${sessionCache.sessionid}`);
                     log(`session expires on ${new Date(sessionCache.expiresDate)}`);
+
+                    if (new Date() >= new Date(sessionCache.expiresDate)) {
+                        log('delete session cache');
+
+                        sessionCache = undefined;
+                        InstagramClient.removeSession();
+                    }
                 }
                 
-                if (!sessionCache || new Date() >= new Date(sessionCache.expiresDate)) {
+                if (!sessionCache) {
                     log('refreshing session cache');
         
                     sessionCache = await this.authenticate();
@@ -450,15 +460,25 @@ const getLatestPost = async (username) => {
 
 //------------------------------------------------
 const createTempWidget = async () => {
+    const padding = getPaddingSize();
+    
     const widget = new ListWidget();
+    widget.setPadding(padding, padding, padding, padding);
     widget.backgroundImage = await InstagramClient.readImage();
+    widget.backgroundGradient = newLinearGradient(['#00000088', '#ffffff00', '#ffffff00'], [1, 0.75, 0]);
+
+    const stack = createStack(widget);
+
+    addSymbol(stack, 'wifi.exclamationmark', getFontSize());
+
+    stack.addSpacer();
+    widget.addSpacer();
 
     return widget;
 };
 
 //------------------------------------------------
 const createErrorWidget = async (data) => {
-    InstagramClient.removeSession();
     
     try {
         return await createTempWidget();
@@ -466,13 +486,11 @@ const createErrorWidget = async (data) => {
         const widget = new ListWidget();
         widget.addSpacer();
 
-		log(data.message);
+        log(data.message);
 
-		const text = widget.addText(data.message);
-		text.textColor = Color.white();
-		text.centerAlignText();
-
-		widget.addSpacer();
+        const text = widget.addText(data.message);
+        text.textColor = Color.white();
+        text.centerAlignText();
 
         return widget;
     }
@@ -485,9 +503,8 @@ const createWidget = async (data, widgetFamily) => {
         return await createErrorWidget(data);
     }
 
-    widgetFamily = widgetFamily || config.widgetFamily;
-    const padding = (widgetFamily === 'large') ? 12 : 10;
-    const fontSize = (widgetFamily === 'large') ? 14 : 10;
+    const padding = getPaddingSize(widgetFamily);
+    const fontSize = getFontSize(widgetFamily);
     const img = await download('Image', data.display_url);
    
     InstagramClient.saveImage(img, data.display_url);
@@ -503,32 +520,28 @@ const createWidget = async (data, widgetFamily) => {
         // add gradient with a semi-transparent 
         // dark section at the bottom. this helps
         // with the readability of the status line
-        widget.backgroundGradient = newLinearGradient(['#ffffff00','#ffffff00','#00000088'], [0,0.75, 1]);
+        widget.backgroundGradient = newLinearGradient(['#ffffff00','#ffffff00','#00000088'], [0, 0.75, 1]);
 
         // top spacer to push the bottom stack down
         widget.addSpacer();
 
-        // horizontal stack to hold the status line
-        const stats = widget.addStack();
-        stats.layoutHorizontally();
-        stats.centerAlignContent();
-        stats.spacing = 3;
+        const stats = createStack(widget);
 
         if (ARGUMENTS.showUserName) {
-            const eUsr = addText(stats, `@${data.username}`,'left', fontSize);
+            addText(stats, `@${data.username}`,'left', fontSize);
         }
 
         // center spacer to push items to the sides
         stats.addSpacer();
 
         if (ARGUMENTS.showLikes) {
-            const heart = addSymbol(stats, 'heart.fill', fontSize);
-            const eLikes = addText(stats, abbreviateNumber(data.likes), 'right', fontSize);
+            addSymbol(stats, 'heart.fill', fontSize);
+            addText(stats, abbreviateNumber(data.likes), 'right', fontSize);
         }
 
         if (ARGUMENTS.showComments) {
-            const msg = addSymbol(stats, 'message.fill', fontSize);
-            const eComm = addText(stats, abbreviateNumber(data.comments), 'right', fontSize);
+            addSymbol(stats, 'message.fill', fontSize);
+            addText(stats, abbreviateNumber(data.comments), 'right', fontSize);
         }
     }
 
@@ -537,8 +550,7 @@ const createWidget = async (data, widgetFamily) => {
 
 //------------------------------------------------
 const addSymbol = (container, name, size) => {
-    const sfIcon = SFSymbol.named(name);
-    const icon = container.addImage(sfIcon.image);
+    const icon = container.addImage(SFSymbol.named(name).image);
     icon.tintColor = Color.white();
     icon.imageSize = new Size(size,size);
 
@@ -570,6 +582,17 @@ const newLinearGradient = (hexcolors, locations) => {
 };
 
 //------------------------------------------------
+const createStack = (widget) => {
+    // horizontal stack to hold the status line
+    const stack = widget.addStack();
+    stack.layoutHorizontally();
+    stack.centerAlignContent();
+    stack.spacing = 3;
+
+    return stack;
+};
+
+//------------------------------------------------
 const download = async (dType, url) => {
     const req = new Request(url);
 
@@ -577,12 +600,24 @@ const download = async (dType, url) => {
 };
 
 //------------------------------------------------
+const getPaddingSize = (widgetFamily) => {
+    widgetFamily = widgetFamily || config.widgetFamily;
+
+    return (widgetFamily === 'large') ? 12 : 10;
+};
+
+//------------------------------------------------
+const getFontSize = (widgetFamily) => {
+    widgetFamily = widgetFamily || config.widgetFamily;
+    
+    return (widgetFamily === 'large') ? 14 : 10;
+};
+
+//------------------------------------------------
 const createLatestPostWidget = async (username, widgetFamily) => {
 
     if (await isOnline()) {
-        const post = await getLatestPost(username, widgetFamily);
-
-        return await createWidget(post);
+        return await createWidget(await getLatestPost(username, widgetFamily));
     }
 
     return await createTempWidget();
@@ -691,11 +726,11 @@ const MENU_ROWS = {
         title: 'Preview Widget',
         subtitle: 'Provides a preview for testing.',
         onSelect: async () => {
-            
-            if (ARGUMENTS.isNeedLogin) {
-                await InstagramClient.startSession();
-            }
 
+	        if (ARGUMENTS.isNeedLogin) {
+				await InstagramClient.startSession();
+        	}   
+            
             const options = ['Small', 'Medium', 'Large', 'Cancel'];
             const resp = await presentAlert('Preview Widget', options);
     
