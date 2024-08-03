@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.1.2';
+const VERSION = '2.1.3';
 
 const DEBUG = false;
 const log = (args) => {
@@ -318,6 +318,7 @@ const InstagramClient = {
                     }
                 }
             }
+            
             return undefined;
         } catch (e) {
             log(e.message);
@@ -348,7 +349,7 @@ const InstagramClient = {
     },
     saveImage: async function (image, imageUrl) {
         const regex = /(\d{1,}_\d{1,}_\d{1,}_n)/gi;
-        this.fm.writeImage(this.fm.joinPath(this.imageRoot, `${regex.exec(imageUrl)[0]}.jpg`), image);
+        this.fm.writeImage(this.fm.joinPath(this.imageRoot, `${regex.exec(imageUrl).shift()}.jpg`), image);
     },
     readImage: async function () {
         const files = this.fm.listContents(this.imageRoot);
@@ -433,8 +434,6 @@ const getLatestPost = async (username) => {
         };
     }
 
-    console.log(user);
-
     if (!user || !user.items) {
         return {
             has_error: true,
@@ -444,13 +443,13 @@ const getLatestPost = async (username) => {
 
     let idx = Math.floor(Math.random() * user.items.length);
     let item = user.items[idx];
-    let mediaInfo = item.image_versions2;
+    let mediaInfo = item.carousel_media?.[Math.floor(Math.random() * item.carousel_media?.length)]?.image_versions2 || item.image_versions2
 
     return {
         has_error: false,
         username: username,
         shortcode: item.pk,
-        display_url: mediaInfo.candidates.sort((a, b) => b.width - a.width)[0].url,
+        display_url: mediaInfo.candidates.sort((a, b) => b.width - a.width).shift().url,
         is_video: item.media_type == 2,
         comments: item.comment_count,
         likes: item.like_count
@@ -726,9 +725,9 @@ const MENU_ROWS = {
         subtitle: 'Provides a preview for testing.',
         onSelect: async () => {
 
-	        if (ARGUMENTS.isNeedLogin) {
-				await InstagramClient.startSession();
-        	}   
+           if (ARGUMENTS.isNeedLogin) {
+            await InstagramClient.startSession();
+           }   
             
             const options = ['Small', 'Medium', 'Large', 'Cancel'];
             const resp = await presentAlert('Preview Widget', options);
