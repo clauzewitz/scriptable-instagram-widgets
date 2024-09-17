@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.1.3';
+const VERSION = '2.1.4';
 
 const DEBUG = false;
 const log = (args) => {
@@ -30,6 +30,9 @@ const log = (args) => {
         console.log(args);
     }
 };
+
+const WIDGET_FAMILY = Device.isPad() ? ['small', 'medium', 'large', 'extraLarge'] : ['small', 'medium', 'large'];
+const LARGE_WIDGET_FAMILY = ['large', 'extraLarge'];
 
 const ARGUMENTS = {
     appId: '936619743392459',
@@ -48,7 +51,7 @@ const ARGUMENTS = {
     showComments: true,
     // only show the staus line is any of the
     // status items are visible
-    showStatusLine: function () {
+    showStatusLine: () => {
         return this.showUserName || this.showLikes || this.showComments;
     },
     // The script randomly chooses from this list of
@@ -88,7 +91,7 @@ const CommonUtil = {
     
         return isValid;
     },
-    compareVersion: function (version1 = '', version2 = '') {
+    compareVersion: (version1 = '', version2 = '') => {
         version1 = version1.replace(/\.|\s|\r\n|\r|\n/gi, '');
         version2 = version2.replace(/\.|\s|\r\n|\r|\n/gi, '');
 
@@ -97,6 +100,11 @@ const CommonUtil = {
         }
 
         return version1 < version2;
+    },
+    isLargeFamily: (widgetFamily) => {
+        widgetFamily = widgetFamily || config.widgetFamily;
+    
+        return LARGE_WIDGET_FAMILY.contains(widgetFamily);
     }
 };
 
@@ -114,7 +122,7 @@ const isOnline = async () => {
 // EMBED 
 const InstagramClient = {
     //----------------------------------------------
-    initialize: function () {
+    initialize: () => {
         try {
             this.USES_ICLOUD = module.filename.includes('Documents/iCloud~');
             this.fm = this.USES_ICLOUD ? FileManager.iCloud() : FileManager.local();
@@ -138,7 +146,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    authenticate: async function () {
+    authenticate: async () => {
         try {
 
             if (!config.runsInWidget && ARGUMENTS.isNeedLogin) {
@@ -198,7 +206,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    logout: async function () {
+    logout: async () => {
         try {
             log(`session exists - ${this.fm.fileExists(this.sessionPath)}`);
 
@@ -219,7 +227,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    startSession: async function () {
+    startSession: async () => {
         try {
 
             if (ARGUMENTS.isNeedLogin) {
@@ -252,7 +260,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    fetchData: async function (uri) {
+    fetchData: async (uri) => {
         log(`fetching ${uri}`);
 
         const req = new Request(`https://www.instagram.com/api/v1${uri}`);        
@@ -273,7 +281,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    getUserInfo: async function (username) {
+    getUserInfo: async (username) => {
         try {
             const response = await this.fetchData(`/feed/user/${username}/username/?count=${ARGUMENTS.maxRecentPosts}`);
         
@@ -288,7 +296,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    readSession: async function () {
+    readSession: async () => {
         try {
 
             if (ARGUMENTS.isNeedLogin) {
@@ -326,7 +334,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    saveSession: async function (json) {
+    saveSession: async (json) => {
         try {
 
             if (ARGUMENTS.isNeedLogin) {
@@ -342,16 +350,16 @@ const InstagramClient = {
             throw new Error(e.message);
         }
     },
-    removeSession: async function () {
+    removeSession: async () => {
         if (this.fm.fileExists(this.sessionPath)) {
             this.fm.remove(this.sessionPath);
         }
     },
-    saveImage: async function (image, imageUrl) {
+    saveImage: async (image, imageUrl) => {
         const regex = /(\d{1,}_\d{1,}_\d{1,}_n)/gi;
         this.fm.writeImage(this.fm.joinPath(this.imageRoot, `${regex.exec(imageUrl).shift()}.jpg`), image);
     },
-    readImage: async function () {
+    readImage: async () => {
         const files = this.fm.listContents(this.imageRoot);
        
         if (files.length > 0) {
@@ -362,7 +370,7 @@ const InstagramClient = {
             throw new Error("Not Found Image");
         }
     },
-    getCookies: async function () {
+    getCookies: async () => {
         try {
 
             if (ARGUMENTS.isNeedLogin) {
@@ -383,10 +391,10 @@ const InstagramClient = {
             log(e.message);
         }
     },
-    clearCache: async function () {
+    clearCache: async () => {
         this.fm.remove(this.root);
     },
-    updateModule: async function () {
+    updateModule: async () => {
         try {
             const latestVersion = await new Request('https://raw.githubusercontent.com/clauzewitz/scriptable-instagram-widgets/master/version').loadString();
 
@@ -402,7 +410,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    presentAlert: async function (prompt = '', items = ['OK'], asSheet = false) {
+    presentAlert: async (prompt = '', items = ['OK'], asSheet = false) => {
         try {
             const alert = new Alert();
             alert.message = prompt;
@@ -599,16 +607,12 @@ const download = async (dType, url) => {
 
 //------------------------------------------------
 const getPaddingSize = (widgetFamily) => {
-    widgetFamily = widgetFamily || config.widgetFamily;
-
-    return (widgetFamily === 'large') ? 12 : 10;
+    return CommonUtil.isLargeFamily(widgetFamily) ? 12 : 10;
 };
 
 //------------------------------------------------
 const getFontSize = (widgetFamily) => {
-    widgetFamily = widgetFamily || config.widgetFamily;
-    
-    return (widgetFamily === 'large') ? 14 : 10;
+    return CommonUtil.isLargeFamily(widgetFamily) ? 14 : 10;
 };
 
 //------------------------------------------------
@@ -729,7 +733,7 @@ const MENU_ROWS = {
             await InstagramClient.startSession();
            }   
             
-            const options = ['Small', 'Medium', 'Large', 'Cancel'];
+            const options = [...WIDGET_FAMILY, 'Cancel'];
             const resp = await presentAlert('Preview Widget', options);
     
             if (resp === options.length - 1) {
