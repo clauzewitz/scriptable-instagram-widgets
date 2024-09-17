@@ -31,7 +31,7 @@ const log = (args) => {
     }
 };
 
-const WIDGET_FAMILY = Device.isPad() ? ['small', 'medium', 'large', 'extraLarge'] : ['small', 'medium', 'large'];
+const WIDGET_FAMILY = Device.isPad() ? ['Small', 'Medium', 'Large', 'ExtraLarge'] : ['Small', 'Medium', 'Large'];
 const LARGE_WIDGET_FAMILY = ['large', 'extraLarge'];
 
 const ARGUMENTS = {
