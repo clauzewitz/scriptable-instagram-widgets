@@ -1,6 +1,6 @@
 // Variables used by Scriptable.
 // These must be at the very top of the file. Do not edit.
-// icon-color: yellow icon-glyph: camera-retro;
+// icon-color: yellow; icon-glyph: camera-retro;
 /* -----------------------------------------------
 Script      : ig-latest-post.js
 Author      : me@supermamon.com
