@@ -104,7 +104,7 @@ const CommonUtil = {
     isLargeFamily: (widgetFamily) => {
         widgetFamily = widgetFamily || config.widgetFamily;
     
-        return LARGE_WIDGET_FAMILY.contains(widgetFamily);
+        return LARGE_WIDGET_FAMILY.includes(widgetFamily);
     }
 };
 
