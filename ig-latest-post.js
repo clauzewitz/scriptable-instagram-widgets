@@ -122,7 +122,7 @@ const isOnline = async () => {
 // EMBED 
 const InstagramClient = {
     //----------------------------------------------
-    initialize: () => {
+    initialize: function () {
         try {
             this.USES_ICLOUD = module.filename.includes('Documents/iCloud~');
             this.fm = this.USES_ICLOUD ? FileManager.iCloud() : FileManager.local();
@@ -146,7 +146,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    authenticate: async () => {
+    authenticate: async function () {
         try {
 
             if (!config.runsInWidget && ARGUMENTS.isNeedLogin) {
@@ -206,7 +206,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    logout: async () => {
+    logout: async function () {
         try {
             log(`session exists - ${this.fm.fileExists(this.sessionPath)}`);
 
@@ -227,7 +227,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    startSession: async () => {
+    startSession: async function () {
         try {
 
             if (ARGUMENTS.isNeedLogin) {
@@ -260,7 +260,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    fetchData: async (uri) => {
+    fetchData: async function (uri) {
         log(`fetching ${uri}`);
 
         const req = new Request(`https://www.instagram.com/api/v1${uri}`);        
@@ -281,7 +281,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    getUserInfo: async (username) => {
+    getUserInfo: async function (username) {
         try {
             const response = await this.fetchData(`/feed/user/${username}/username/?count=${ARGUMENTS.maxRecentPosts}`);
         
@@ -296,7 +296,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    readSession: async () => {
+    readSession: async function () {
         try {
 
             if (ARGUMENTS.isNeedLogin) {
@@ -334,7 +334,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    saveSession: async (json) => {
+    saveSession: async function (json) {
         try {
 
             if (ARGUMENTS.isNeedLogin) {
@@ -350,16 +350,16 @@ const InstagramClient = {
             throw new Error(e.message);
         }
     },
-    removeSession: async () => {
+    removeSession: async function () {
         if (this.fm.fileExists(this.sessionPath)) {
             this.fm.remove(this.sessionPath);
         }
     },
-    saveImage: async (image, imageUrl) => {
+    saveImage: async function (image, imageUrl) {
         const regex = /(\d{1,}_\d{1,}_\d{1,}_n)/gi;
         this.fm.writeImage(this.fm.joinPath(this.imageRoot, `${regex.exec(imageUrl).shift()}.jpg`), image);
     },
-    readImage: async () => {
+    readImage: async function () {
         const files = this.fm.listContents(this.imageRoot);
        
         if (files.length > 0) {
@@ -370,7 +370,7 @@ const InstagramClient = {
             throw new Error("Not Found Image");
         }
     },
-    getCookies: async () => {
+    getCookies: async function () {
         try {
 
             if (ARGUMENTS.isNeedLogin) {
@@ -391,10 +391,10 @@ const InstagramClient = {
             log(e.message);
         }
     },
-    clearCache: async () => {
+    clearCache: async function () {
         this.fm.remove(this.root);
     },
-    updateModule: async () => {
+    updateModule: async function () {
         try {
             const latestVersion = await new Request('https://raw.githubusercontent.com/clauzewitz/scriptable-instagram-widgets/master/version').loadString();
 
@@ -410,7 +410,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    presentAlert: async (prompt = '', items = ['OK'], asSheet = false) => {
+    presentAlert: async function (prompt = '', items = ['OK'], asSheet = false) {
         try {
             const alert = new Alert();
             alert.message = prompt;
