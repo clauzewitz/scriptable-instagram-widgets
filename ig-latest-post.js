@@ -80,7 +80,7 @@ const MENU_PROPERTY = {
 Object.freeze(MENU_PROPERTY);
 
 const CommonUtil = {
-    isNumber: (value) => {
+    isNumber: function (value) {
         let isValid = false;
     
         if (typeof value === 'number') {
@@ -91,7 +91,7 @@ const CommonUtil = {
     
         return isValid;
     },
-    compareVersion: (version1 = '', version2 = '') => {
+    compareVersion: function (version1 = '', version2 = '') {
         version1 = version1.replace(/\.|\s|\r\n|\r|\n/gi, '');
         version2 = version2.replace(/\.|\s|\r\n|\r|\n/gi, '');
 
@@ -101,7 +101,7 @@ const CommonUtil = {
 
         return version1 < version2;
     },
-    isLargeFamily: (widgetFamily) => {
+    isLargeFamily: function (widgetFamily) {
         widgetFamily = widgetFamily || config.widgetFamily;
     
         return LARGE_WIDGET_FAMILY.includes(widgetFamily);
