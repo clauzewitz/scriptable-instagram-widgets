@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.2.0';
+const VERSION = '2.2.1';
 
 const DEBUG = false;
 const log = (args) => {
@@ -434,6 +434,23 @@ const InstagramClient = {
 // InstagramClient module ends -------------------
 
 //------------------------------------------------
+// widget: largest candidate within maxWidth that keeps the original
+// aspect ratio (skips square crops), full: largest candidate overall
+const pickImageUrls = (candidates, maxWidth = 1080) => {
+    const area = (c) => c.width * c.height;
+    const full = [...candidates].sort((a, b) => area(b) - area(a))[0];
+    const ratio = full.width / full.height;
+    const fit = candidates
+        .filter(c => c.width <= maxWidth && Math.abs(c.width / c.height - ratio) / ratio < 0.02)
+        .sort((a, b) => area(b) - area(a))[0];
+
+    return {
+        widgetUrl: (fit || full).url,
+        fullUrl: full.url
+    };
+};
+
+//------------------------------------------------
 const getLatestPost = async (username) => {
     let user = undefined;
 
@@ -455,16 +472,28 @@ const getLatestPost = async (username) => {
         };
     }
 
-    let idx = Math.floor(Math.random() * user.items.length);
-    let item = user.items[idx];
-    let mediaInfo = item.carousel_media?.[Math.floor(Math.random() * item.carousel_media?.length)]?.image_versions2 || item.image_versions2
+    // exclude videos (media_type 2), including video slides in carousels
+    const isImage = (media) => media.media_type != 2;
+    const items = user.items.filter(item => isImage(item) && (!item.carousel_media || item.carousel_media.some(isImage)));
+
+    if (items.length === 0) {
+        return {
+            has_error: true,
+            message: `no image posts\n${username}`
+        };
+    }
+
+    const item = getRandom(items);
+    const media = item.carousel_media ? getRandom(item.carousel_media.filter(isImage)) : item;
+    const { widgetUrl, fullUrl } = pickImageUrls(media.image_versions2.candidates);
 
     return {
         has_error: false,
         username: username,
         shortcode: item.pk,
-        display_url: mediaInfo.candidates.sort((a, b) => b.width - a.width).shift().url,
-        is_video: item.media_type == 2,
+        display_url: widgetUrl,
+        full_url: fullUrl,
+        is_video: media.media_type == 2,
         comments: item.comment_count,
         likes: item.like_count
     };
@@ -524,7 +553,7 @@ const createWidget = async (data, widgetFamily) => {
     const widget = new ListWidget();
     widget.refreshAfterDate = new Date((Date.now() + (1000 * 60 * ARGUMENTS.refreshInterval)));
 //    widget.url = `https://www.instagram.com/p/${data.shortcode}`;
-    widget.url = data.display_url;
+    widget.url = data.full_url;
     widget.setPadding(padding, padding, padding, padding);
     widget.backgroundImage = img;
 
