@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.1.4';
+const VERSION = '2.2.0';
 
 const DEBUG = false;
 const log = (args) => {
@@ -36,6 +36,9 @@ const LARGE_WIDGET_FAMILY = ['large', 'extraLarge'];
 
 const ARGUMENTS = {
     appId: '936619743392459',
+    // PolarisProfilePostsTabContentQuery_connection.
+    // Instagram may rotate this id on deploy.
+    profilePostsDocId: '28858033960505345',
     isNeedLogin: true,
     // desired interval in minutes to refresh the
     // widget. This will only tell IOS that it's
@@ -51,7 +54,7 @@ const ARGUMENTS = {
     showComments: true,
     // only show the staus line is any of the
     // status items are visible
-    showStatusLine: () => {
+    showStatusLine: function () {
         return this.showUserName || this.showLikes || this.showComments;
     },
     // The script randomly chooses from this list of
@@ -92,14 +95,23 @@ const CommonUtil = {
         return isValid;
     },
     compareVersion: function (version1 = '', version2 = '') {
-        version1 = version1.replace(/\.|\s|\r\n|\r|\n/gi, '');
-        version2 = version2.replace(/\.|\s|\r\n|\r|\n/gi, '');
+        const v1 = version1.trim().split('.');
+        const v2 = version2.trim().split('.');
 
-        if (!this.isNumber(version1) || !this.isNumber(version2)) {
+        if (![...v1, ...v2].every(v => this.isNumber(v))) {
             return false;
         }
 
-        return version1 < version2;
+        // compare each segment numerically so that 2.1.4 < 2.1.10
+        for (let i = 0; i < Math.max(v1.length, v2.length); i++) {
+            const diff = Number(v1[i] || 0) - Number(v2[i] || 0);
+
+            if (diff !== 0) {
+                return diff < 0;
+            }
+        }
+
+        return false;
     },
     isLargeFamily: function (widgetFamily) {
         widgetFamily = widgetFamily || config.widgetFamily;
@@ -123,231 +135,224 @@ const isOnline = async () => {
 const InstagramClient = {
     //----------------------------------------------
     initialize: function () {
-        try {
-            this.USES_ICLOUD = module.filename.includes('Documents/iCloud~');
-            this.fm = this.USES_ICLOUD ? FileManager.iCloud() : FileManager.local();
-            this.root = this.fm.joinPath(this.fm.documentsDirectory(), '/cache/igclient');
-            this.imageRoot = this.fm.joinPath(this.root, '/images');
-            this.fm.createDirectory(this.root, true);
-            this.fm.createDirectory(this.imageRoot, true)
+        this.USES_ICLOUD = module.filename.includes('Documents/iCloud~');
+        this.fm = this.USES_ICLOUD ? FileManager.iCloud() : FileManager.local();
+        this.root = this.fm.joinPath(this.fm.documentsDirectory(), '/cache/igclient');
+        this.imageRoot = this.fm.joinPath(this.root, '/images');
+        this.fm.createDirectory(this.root, true);
+        this.fm.createDirectory(this.imageRoot, true)
 
-            if (ARGUMENTS.isNeedLogin) {        
-                // track the number of login attempts
-                // so we don't get an infinite login screen
-                this.loginAttempts = 0;
-                this.MAX_ATTEMPTS = 2;
-        
-                this.sessionPath = this.fm.joinPath(this.root, 'session.json');
-                this.sessionid = '';
-            } 
-        } catch (e) {
-            log(e.message);
-            throw new Error(e.message);
+        if (ARGUMENTS.isNeedLogin) {
+            // track the number of login attempts
+            // so we don't get an infinite login screen
+            this.loginAttempts = 0;
+            this.MAX_ATTEMPTS = 2;
+
+            this.sessionPath = this.fm.joinPath(this.root, 'session.json');
+            this.sessionid = '';
         }
     },
     //----------------------------------------------
     authenticate: async function () {
-        try {
 
-            if (!config.runsInWidget && ARGUMENTS.isNeedLogin) {
-                const url = 'https://instagram.com/';
-                const req = new Request(url);
-                const result = {};
-        
-                await req.load();
-        
-                if (req.response.cookies && Array.isArray(req.response.cookies)) {
-                    req.response.cookies.forEach(cookie => {
-                        
-                        if (cookie.name === 'sessionid') {
-                            result.sessionid = cookie.value; 
-                            result.expiresDate = cookie.expiresDate;
-                            result.cookies = req.response.cookies;
-                            return;
-                        }
-                    });
-                }
-        
-                if (!result.sessionid) {
-        
-                    if (this.loginAttempts < this.MAX_ATTEMPTS) {
-                        this.loginAttempts++;
-                        const resp = await this.presentAlert('You will now be presented with the Instagram login window.\nAuthentication happens on the Instagram website and your credentials will neither be captured nor stored.', ['Proceed', 'Cancel']);
-        
-                        if (resp === 1) {
-                            this.loginAttempts = this.MAX_ATTEMPTS;
-                            throw new Error('login was cancelled');
-                        }
-                        
-                        const webview = new WebView();
-        
-                        await webview.loadURL(url);
-                        await webview.present(false);
-        
-                        return await this.authenticate();
-                    } else {
-                        throw new Error('Maximum number of login attempts reached. Please launch the script again.');
+        if (!config.runsInWidget && ARGUMENTS.isNeedLogin) {
+            const url = 'https://instagram.com/';
+            const req = new Request(url);
+            const result = {};
+
+            await req.load();
+
+            if (req.response.cookies && Array.isArray(req.response.cookies)) {
+                req.response.cookies.forEach(cookie => {
+
+                    if (cookie.name === 'sessionid') {
+                        result.sessionid = cookie.value;
+                        result.expiresDate = cookie.expiresDate;
+                        result.cookies = req.response.cookies;
+                        return;
                     }
-                } else {
-                    result.cookies = req.response.cookies;
-        
-                    await this.saveSession(result);
-        
-                    this.sessionid = result.sessionid;
-        
-                    return result;
-                }
+                });
             }
 
-            return undefined;
-        } catch (e) {
-            log(e.message);
-            throw new Error(e.message);
+            if (!result.sessionid) {
+
+                if (this.loginAttempts < this.MAX_ATTEMPTS) {
+                    this.loginAttempts++;
+                    const resp = await this.presentAlert('You will now be presented with the Instagram login window.\nAuthentication happens on the Instagram website and your credentials will neither be captured nor stored.', ['Proceed', 'Cancel']);
+
+                    if (resp === 1) {
+                        this.loginAttempts = this.MAX_ATTEMPTS;
+                        throw new Error('login was cancelled');
+                    }
+
+                    const webview = new WebView();
+
+                    await webview.loadURL(url);
+                    await webview.present(false);
+
+                    return await this.authenticate();
+                } else {
+                    throw new Error('Maximum number of login attempts reached. Please launch the script again.');
+                }
+            } else {
+                result.cookies = req.response.cookies;
+
+                await this.saveSession(result);
+
+                this.sessionid = result.sessionid;
+
+                return result;
+            }
         }
+
+        return undefined;
     },
     //----------------------------------------------
     logout: async function () {
-        try {
-            log(`session exists - ${this.fm.fileExists(this.sessionPath)}`);
+        log(`session exists - ${this.fm.fileExists(this.sessionPath)}`);
 
-            if (this.fm.fileExists(this.sessionPath)) {
-                log('deleting session file');
-    
-                await this.fm.remove(this.sessionPath);
-            }
-    
-            log('logging out');
-    
-            const webview = new WebView();
-            await webview.loadURL('https://www.instagram.com/accounts/logout');
-            //await webview.present(false);
-        } catch (e) {
-            log(e.message);
-            throw new Error(e.message);
+        if (this.fm.fileExists(this.sessionPath)) {
+            log('deleting session file');
+
+            await this.fm.remove(this.sessionPath);
         }
+
+        log('logging out');
+
+        const webview = new WebView();
+        await webview.loadURL('https://www.instagram.com/accounts/logout');
+        //await webview.present(false);
     },
     //----------------------------------------------
     startSession: async function () {
-        try {
 
-            if (ARGUMENTS.isNeedLogin) {
-                let sessionCache = await this.readSession();
-        
-                if (sessionCache) {
-                    log(`cached sessionid ${sessionCache.sessionid}`);
-                    log(`session expires on ${new Date(sessionCache.expiresDate)}`);
+        if (ARGUMENTS.isNeedLogin) {
+            let sessionCache = await this.readSession();
 
-                    if (new Date() >= new Date(sessionCache.expiresDate)) {
-                        log('delete session cache');
+            if (sessionCache) {
+                log(`cached sessionid ${sessionCache.sessionid}`);
+                log(`session expires on ${new Date(sessionCache.expiresDate)}`);
 
-                        sessionCache = undefined;
-                        InstagramClient.removeSession();
-                    }
+                if (new Date() >= new Date(sessionCache.expiresDate)) {
+                    log('delete session cache');
+
+                    sessionCache = undefined;
+                    InstagramClient.removeSession();
                 }
-                
-                if (!sessionCache) {
-                    log('refreshing session cache');
-        
-                    sessionCache = await this.authenticate();
-                    this.sessionid = sessionCache.sessionid;
-                }
-        
-                return (sessionCache) ? this : new Error(e.message);
             }
-        } catch (e) {
-            log(e.message);
-            throw new Error(e.message);
+
+            if (!sessionCache) {
+                log('refreshing session cache');
+
+                // authenticate() also sets this.sessionid
+                sessionCache = await this.authenticate();
+            }
+
+            if (!sessionCache) {
+                throw new Error('Instagram session not found. Please launch the script in the app to log in.');
+            }
+
+            return this;
         }
     },
     //----------------------------------------------
-    fetchData: async function (uri) {
-        log(`fetching ${uri}`);
+    fetchGraphQL: async function (docId, variables) {
+        log(`fetching graphql ${docId}`);
 
-        const req = new Request(`https://www.instagram.com/api/v1${uri}`);        
+        const cookies = await this.getCookies();
+        const csrf = (cookies.match(/csrftoken=([^;]+)/) || [])[1] || '';
+
+        const req = new Request('https://www.instagram.com/graphql/query');
+        req.method = 'POST';
         req.headers = {
             'X-IG-App-ID': ARGUMENTS.appId,
-            Cookie: `${await this.getCookies()}`
+            'X-CSRFToken': csrf,
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Referer: 'https://www.instagram.com/',
+            Cookie: cookies
         };
+        req.body = `doc_id=${docId}&variables=${encodeURIComponent(JSON.stringify(variables))}`;
 
-        try {
-            const response = await req.loadJSON();
+        const response = await req.loadJSON();
 
-            log(response);
+        log(response);
 
-            return response;
-        } catch (e) {
-            log(e.message);
-            throw new Error(e.message);
-        }
+        return response;
     },
     //----------------------------------------------
     getUserInfo: async function (username) {
-        try {
-            const response = await this.fetchData(`/feed/user/${username}/username/?count=${ARGUMENTS.maxRecentPosts}`);
-        
-            if (Object.keys(response).length === 0) {
-                throw new Error(`Invalid user - ${username}`);
-            }
+        const count = Number(ARGUMENTS.maxRecentPosts);
+        const response = await this.fetchGraphQL(ARGUMENTS.profilePostsDocId, {
+            after: null,
+            before: null,
+            first: count,
+            last: null,
+            username: username,
+            data: {
+                count: count,
+                include_reel_media_seen_timestamp: true,
+                include_relationship_info: true,
+                latest_besties_reel_media: true,
+                latest_reel_media: true
+            },
+            include_multi_captions: false,
+            __relay_internal__pv__PolarisMultiCaptionCarouselEnabledrelayprovider: false,
+            __relay_internal__pv__PolarisShortDramaEnabledrelayprovider: false,
+            __relay_internal__pv__PolarisThreadsStyleCommentsEnabledrelayprovider: false,
+            __relay_internal__pv__PolarisReelsRecoDebugOverlayEnabledrelayprovider: false
+        });
+        const edges = response?.data?.xdt_api__v1__feed__user_timeline_graphql_connection?.edges || [];
 
-            return response;
-        } catch (e) {
-            log(e.message);
-            throw new Error(e.message);
+        if (edges.length === 0) {
+            throw new Error(`Invalid user - ${username}`);
         }
+
+        // keep the legacy REST shape so getLatestPost() works unchanged
+        return { items: edges.map(edge => edge.node) };
     },
     //----------------------------------------------
     readSession: async function () {
-        try {
 
-            if (ARGUMENTS.isNeedLogin) {
-                log('reading session');
+        if (ARGUMENTS.isNeedLogin) {
+            log('reading session');
 
-                if (this.fm.fileExists(this.sessionPath)) {
-                    log(`file found`);
-        
-                 if (this.USES_ICLOUD) {
-                        await this.fm.downloadFileFromiCloud(this.sessionPath);
-                    }
-                    
-                    log(`reading session file`);
-                
-                    const result = await this.fm.read(this.sessionPath);
-        
-                    if (!result || !result.toRawString()) {
-                        log(`error reading file`);
-        
-                        return undefined;
-                    } else {
-                        const session = JSON.parse(result.toRawString());
-        
-                        log(session);
-        
-                        return session;
-                    }
+            if (this.fm.fileExists(this.sessionPath)) {
+                log(`file found`);
+
+                if (this.USES_ICLOUD) {
+                    await this.fm.downloadFileFromiCloud(this.sessionPath);
+                }
+
+                log(`reading session file`);
+
+                const result = await this.fm.read(this.sessionPath);
+
+                if (!result || !result.toRawString()) {
+                    log(`error reading file`);
+
+                    return undefined;
+                } else {
+                    const session = JSON.parse(result.toRawString());
+
+                    log(session);
+
+                    return session;
                 }
             }
-            
-            return undefined;
-        } catch (e) {
-            log(e.message);
-            throw new Error(e.message);
         }
+
+        return undefined;
     },
     //----------------------------------------------
     saveSession: async function (json) {
-        try {
 
-            if (ARGUMENTS.isNeedLogin) {
+        if (ARGUMENTS.isNeedLogin) {
 
-                if (this.fm.fileExists(this.sessionPath)) {
-                    await this.fm.remove(this.sessionPath);
-                }
-        
-                await this.fm.writeString(this.sessionPath, JSON.stringify(json));
+            if (this.fm.fileExists(this.sessionPath)) {
+                await this.fm.remove(this.sessionPath);
             }
-        } catch (e) {
-            log(e.message);
-            throw new Error(e.message);
+
+            await this.fm.writeString(this.sessionPath, JSON.stringify(json));
         }
     },
     removeSession: async function () {
@@ -371,25 +376,26 @@ const InstagramClient = {
         }
     },
     getCookies: async function () {
-        try {
 
-            if (ARGUMENTS.isNeedLogin) {
-                const session = await this.readSession();
-                const cookies = session.cookies.map(cookie => {
-                    log(`adding cookie ${cookie.name}`)
-        
-                    return `${cookie.name}=${cookie.value}`;
-                }).join(';');
-        
-                log(`returning cookies = ${cookies}`);
-        
-                return cookies;
+        if (ARGUMENTS.isNeedLogin) {
+            const session = await this.readSession();
+
+            if (!session?.cookies) {
+                throw new Error('Instagram session not found. Please launch the script in the app to log in.');
             }
-    
-            return '';
-        } catch (e) {
-            log(e.message);
+
+            const cookies = session.cookies.map(cookie => {
+                log(`adding cookie ${cookie.name}`)
+
+                return `${cookie.name}=${cookie.value}`;
+            }).join(';');
+
+            log(`returning cookies = ${cookies}`);
+
+            return cookies;
         }
+
+        return '';
     },
     clearCache: async function () {
         this.fm.remove(this.root);
@@ -522,7 +528,7 @@ const createWidget = async (data, widgetFamily) => {
     widget.setPadding(padding, padding, padding, padding);
     widget.backgroundImage = img;
 
-    if (ARGUMENTS.showStatusLine) {
+    if (ARGUMENTS.showStatusLine()) {
         // add gradient with a semi-transparent 
         // dark section at the bottom. this helps
         // with the readability of the status line
@@ -619,23 +625,11 @@ const getFontSize = (widgetFamily) => {
 const createLatestPostWidget = async (username, widgetFamily) => {
 
     if (await isOnline()) {
-        return await createWidget(await getLatestPost(username, widgetFamily));
+        return await createWidget(await getLatestPost(username), widgetFamily);
     }
 
     return await createTempWidget();
 }
-
-//------------------------------------------------
-const presentAlert = async (prompt, items, asSheet) => {
-    const alert = new Alert();
-    alert.message = prompt;
-    
-    for (const item of items) {
-        alert.addAction(item);
-    }
-
-    return asSheet ? await alert.presentSheet() : await alert.presentAlert();
-};
 
 const checkWidgetParameter = () => {
 
@@ -734,7 +728,7 @@ const MENU_ROWS = {
            }   
             
             const options = [...WIDGET_FAMILY, 'Cancel'];
-            const resp = await presentAlert('Preview Widget', options);
+            const resp = await InstagramClient.presentAlert('Preview Widget', options);
     
             if (resp === options.length - 1) {
                 return;
