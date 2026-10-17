@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.2.1';
+const VERSION = '2.2.2';
 
 const DEBUG = false;
 const log = (args) => {
@@ -436,7 +436,7 @@ const InstagramClient = {
 //------------------------------------------------
 // widget: largest candidate within maxWidth that keeps the original
 // aspect ratio (skips square crops), full: largest candidate overall
-const pickImageUrls = (candidates, maxWidth = 1080) => {
+const pickImageUrls = (candidates, maxWidth = 2048) => {
     const area = (c) => c.width * c.height;
     const full = [...candidates].sort((a, b) => area(b) - area(a))[0];
     const ratio = full.width / full.height;
