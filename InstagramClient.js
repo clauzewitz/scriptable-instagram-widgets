@@ -5,21 +5,29 @@
 /* -----------------------------------------------
 Script      : InstagramClient.js
 Author      : me@supermamon.com
-Version     : 1.0.1
+Version     : 1.1.0
 Description :
-  A scriptable module that can be used to access 
+  A scriptable module that can be used to access
   Instagram
 
-  Largely inspired from 
+  Largely inspired from
     github.com/wiebecommajonas/instagram-widget
 
 Changelog:
+v1.1.0 - getUserInfo() now uses the web GraphQL API
+         and returns { items } (feed posts)
+       - getCookies() throws when there is no session
 v1.0.1 - Fixed "TypeError: null is not an object (evaluating 'req.response.cookies.forEach')"
 v1.0.0 - Initial release
 ----------------------------------------------- */
 
 const DEBUG = false
 var log = (args) => {if (DEBUG) console.log(args)}
+
+const APP_ID = '936619743392459'
+// PolarisProfilePostsTabContentQuery_connection.
+// Instagram may rotate this id on deploy.
+const PROFILE_POSTS_DOC_ID = '28858033960505345'
 //------------------------------------------------
 
 const InstagramClient = {
@@ -144,16 +152,55 @@ const InstagramClient = {
     }
   },
   //----------------------------------------------
-  async getUserInfo(username) {
-    const url = `https://www.instagram.com/${username}/?__a=1`
-    const response = await this.fetchData(url)
-    
-    if (Object.keys(response).length == 0) {
+  async fetchGraphQL(docId, variables) {
+    log(`fetching graphql ${docId}`)
+    var cookies = await this.getCookies()
+    var csrf = (cookies.match(/csrftoken=([^;]+)/) || [])[1] || ''
+
+    let req = new Request('https://www.instagram.com/graphql/query')
+    req.method = 'POST'
+    req.headers = {
+      'X-IG-App-ID': APP_ID,
+      'X-CSRFToken': csrf,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Referer: 'https://www.instagram.com/',
+      Cookie: cookies
+    }
+    req.body = `doc_id=${docId}&variables=${encodeURIComponent(JSON.stringify(variables))}`
+
+    var response = await req.loadJSON()
+    log(response)
+    return response
+  },
+  //----------------------------------------------
+  async getUserInfo(username, count=12) {
+    const response = await this.fetchGraphQL(PROFILE_POSTS_DOC_ID, {
+      after: null,
+      before: null,
+      first: count,
+      last: null,
+      username: username,
+      data: {
+        count: count,
+        include_reel_media_seen_timestamp: true,
+        include_relationship_info: true,
+        latest_besties_reel_media: true,
+        latest_reel_media: true
+      },
+      include_multi_captions: false,
+      __relay_internal__pv__PolarisMultiCaptionCarouselEnabledrelayprovider: false,
+      __relay_internal__pv__PolarisShortDramaEnabledrelayprovider: false,
+      __relay_internal__pv__PolarisThreadsStyleCommentsEnabledrelayprovider: false,
+      __relay_internal__pv__PolarisReelsRecoDebugOverlayEnabledrelayprovider: false
+    })
+    const edges = response?.data?.xdt_api__v1__feed__user_timeline_graphql_connection?.edges || []
+
+    if (edges.length == 0) {
       throw new Error(`Invalid user - ${username}`)
     }
-    
-    var user = response.graphql.user
-    return user
+
+    // same shape as the legacy REST feed: { items: [media, ...] }
+    return { items: edges.map(edge => edge.node) }
   },
   //----------------------------------------------
   async getPostInfo(shortcode) {
@@ -197,8 +244,11 @@ const InstagramClient = {
     await this.fm.writeString(this.sessionPath, JSON.stringify(json))
   },
   async getCookies() {
-    var session = await this.readSession() 
+    var session = await this.readSession()
     log(session)
+    if (!session?.cookies) {
+      throw new Error('Instagram session not found. Please launch the script in the app to log in.')
+    }
     var cookies = session.cookies.map( cookie => {
       log(`adding cookie ${cookie.name}`)
       return `${cookie.name}=${cookie.value}`
@@ -235,7 +285,7 @@ if (module_name == Script.name()) {
     await InstagramClient.startSession()
     try {
       var usr = await InstagramClient.getUserInfo('calsnape')
-      log(usr.username)
+      log(`${usr.items.length} posts`)
     } catch(e) {
       log(e.message) 
     }
