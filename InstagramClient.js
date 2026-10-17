@@ -5,7 +5,7 @@
 /* -----------------------------------------------
 Script      : InstagramClient.js
 Author      : me@supermamon.com
-Version     : 1.1.0
+Version     : 1.1.1
 Description :
   A scriptable module that can be used to access
   Instagram
@@ -14,6 +14,8 @@ Description :
     github.com/wiebecommajonas/instagram-widget
 
 Changelog:
+v1.1.1 - getPostInfo() now uses the web GraphQL API
+         and returns { items } (the post)
 v1.1.0 - getUserInfo() now uses the web GraphQL API
          and returns { items } (feed posts)
        - getCookies() throws when there is no session
@@ -28,6 +30,8 @@ const APP_ID = '936619743392459'
 // PolarisProfilePostsTabContentQuery_connection.
 // Instagram may rotate this id on deploy.
 const PROFILE_POSTS_DOC_ID = '28858033960505345'
+// PolarisPostRootQuery
+const POST_DOC_ID = '28188170744199537'
 //------------------------------------------------
 
 const InstagramClient = {
@@ -133,25 +137,6 @@ const InstagramClient = {
     }
   },
   //----------------------------------------------
-  async fetchData(url) {
-    log(`fetching ${url}`)
-    let req = new Request(url)
-    var cookies = await this.getCookies()
-    log(cookies)
-    req.headers = {
-      Cookie: `${cookies}`
-    }
-    try {
-      //var response = await req.loadJSON()
-      var response = await req.loadString()
-      log(response)
-      response = JSON.parse(response)
-      return response
-    } catch (e) {
-      throw new Error(e.message)
-    }
-  },
-  //----------------------------------------------
   async fetchGraphQL(docId, variables) {
     log(`fetching graphql ${docId}`)
     var cookies = await this.getCookies()
@@ -204,14 +189,19 @@ const InstagramClient = {
   },
   //----------------------------------------------
   async getPostInfo(shortcode) {
-    const url = `https://www.instagram.com/p/${shortcode}/?__a=1`
-    const response = await this.fetchData(url)
-    
-    if (Object.keys(response).length == 0) {
+    const response = await this.fetchGraphQL(POST_DOC_ID, {
+      shortcode: shortcode,
+      __relay_internal__pv__PolarisMultiCaptionCarouselEnabledrelayprovider: false,
+      __relay_internal__pv__PolarisShortDramaEnabledrelayprovider: false,
+      __relay_internal__pv__PolarisThreadsStyleCommentsEnabledrelayprovider: false
+    })
+    const items = response?.data?.xdt_api__v1__media__shortcode__web_info?.items || []
+
+    if (items.length == 0) {
       throw new Error(`Invalid post`)
     }
-    
-    return response
+
+    return { items }
   },
   //----------------------------------------------
   async readSession() {
