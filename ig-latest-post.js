@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.2.2';
+const VERSION = '2.3.0';
 
 const DEBUG = false;
 const log = (args) => {
@@ -38,7 +38,10 @@ const ARGUMENTS = {
     appId: '936619743392459',
     // PolarisProfilePostsTabContentQuery_connection.
     // Instagram may rotate this id on deploy.
-    profilePostsDocId: '28858033960505345',
+    profilePostsDocId: '29298961806354817',
+    // reuse the fetched feed for this many minutes
+    // before calling the API again (avoids rate limits)
+    feedCacheMinutes: 60,
     isNeedLogin: true,
     // desired interval in minutes to refresh the
     // widget. This will only tell IOS that it's
@@ -139,8 +142,10 @@ const InstagramClient = {
         this.fm = this.USES_ICLOUD ? FileManager.iCloud() : FileManager.local();
         this.root = this.fm.joinPath(this.fm.documentsDirectory(), '/cache/igclient');
         this.imageRoot = this.fm.joinPath(this.root, '/images');
+        this.feedRoot = this.fm.joinPath(this.root, '/feeds');
         this.fm.createDirectory(this.root, true);
         this.fm.createDirectory(this.imageRoot, true)
+        this.fm.createDirectory(this.feedRoot, true);
 
         if (ARGUMENTS.isNeedLogin) {
             // track the number of login attempts
@@ -273,14 +278,65 @@ const InstagramClient = {
         };
         req.body = `doc_id=${docId}&variables=${encodeURIComponent(JSON.stringify(variables))}`;
 
-        const response = await req.loadJSON();
+        // when rate limited, Instagram redirects to the home page (HTML)
+        // instead of returning JSON, so stop at the redirect
+        let redirectUrl = null;
+        req.onRedirect = (request) => {
+            redirectUrl = request.url;
+            return null;
+        };
+
+        const text = await req.loadString();
+        const status = req.response.statusCode;
+        let response = undefined;
+
+        try {
+            response = JSON.parse(text);
+        } catch (e) {
+            throw new Error(`Instagram blocked the request (HTTP ${status}${redirectUrl ? ` -> ${redirectUrl}` : ''}). It may be rate limited. Please try again later.`);
+        }
 
         log(response);
+
+        if (!response.data) {
+            const reason = response.errors?.[0]?.summary || response.errors?.[0]?.message || response.message || 'unknown error';
+            throw new Error(`Instagram API error (HTTP ${status}) - ${reason}`);
+        }
 
         return response;
     },
     //----------------------------------------------
+    readFeedCache: async function (username) {
+        const path = this.fm.joinPath(this.feedRoot, `${username}.json`);
+
+        if (!this.fm.fileExists(path)) {
+            return undefined;
+        }
+
+        if (this.USES_ICLOUD) {
+            await this.fm.downloadFileFromiCloud(path);
+        }
+
+        const cache = JSON.parse(this.fm.readString(path));
+        const isFresh = Date.now() - cache.fetchedAt < ARGUMENTS.feedCacheMinutes * 60 * 1000;
+
+        return isFresh ? cache.items : undefined;
+    },
+    //----------------------------------------------
+    saveFeedCache: function (username, items) {
+        const path = this.fm.joinPath(this.feedRoot, `${username}.json`);
+        this.fm.writeString(path, JSON.stringify({ fetchedAt: Date.now(), items: items }));
+    },
+    //----------------------------------------------
     getUserInfo: async function (username) {
+        const cachedItems = await this.readFeedCache(username);
+
+        if (cachedItems) {
+            log(`using cached feed - ${username}`);
+
+            return { items: cachedItems };
+        }
+
         const count = Number(ARGUMENTS.maxRecentPosts);
         const response = await this.fetchGraphQL(ARGUMENTS.profilePostsDocId, {
             after: null,
@@ -307,8 +363,11 @@ const InstagramClient = {
             throw new Error(`Invalid user - ${username}`);
         }
 
+        const items = edges.map(edge => edge.node);
+        this.saveFeedCache(username, items);
+
         // keep the legacy REST shape so getLatestPost() works unchanged
-        return { items: edges.map(edge => edge.node) };
+        return { items: items };
     },
     //----------------------------------------------
     readSession: async function () {

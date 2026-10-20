@@ -5,7 +5,7 @@
 /* -----------------------------------------------
 Script      : InstagramClient.js
 Author      : me@supermamon.com
-Version     : 1.1.1
+Version     : 1.1.2
 Description :
   A scriptable module that can be used to access
   Instagram
@@ -14,6 +14,7 @@ Description :
     github.com/wiebecommajonas/instagram-widget
 
 Changelog:
+v1.1.2 - Updated GraphQL doc_ids
 v1.1.1 - getPostInfo() now uses the web GraphQL API
          and returns { items } (the post)
 v1.1.0 - getUserInfo() now uses the web GraphQL API
@@ -29,9 +30,9 @@ var log = (args) => {if (DEBUG) console.log(args)}
 const APP_ID = '936619743392459'
 // PolarisProfilePostsTabContentQuery_connection.
 // Instagram may rotate this id on deploy.
-const PROFILE_POSTS_DOC_ID = '28858033960505345'
+const PROFILE_POSTS_DOC_ID = '29298961806354817'
 // PolarisPostRootQuery
-const POST_DOC_ID = '28188170744199537'
+const POST_DOC_ID = '29336004576007686'
 //------------------------------------------------
 
 const InstagramClient = {
