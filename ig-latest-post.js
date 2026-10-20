@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.3.0';
+const VERSION = '2.3.1';
 
 const DEBUG = false;
 const log = (args) => {
@@ -42,6 +42,9 @@ const ARGUMENTS = {
     // reuse the fetched feed for this many minutes
     // before calling the API again (avoids rate limits)
     feedCacheMinutes: 60,
+    // after Instagram blocks a request (rate limit),
+    // skip API calls for this many minutes
+    blockedWaitMinutes: 60,
     isNeedLogin: true,
     // desired interval in minutes to refresh the
     // widget. This will only tell IOS that it's
@@ -143,6 +146,7 @@ const InstagramClient = {
         this.root = this.fm.joinPath(this.fm.documentsDirectory(), '/cache/igclient');
         this.imageRoot = this.fm.joinPath(this.root, '/images');
         this.feedRoot = this.fm.joinPath(this.root, '/feeds');
+        this.blockedPath = this.fm.joinPath(this.root, 'blocked.json');
         this.fm.createDirectory(this.root, true);
         this.fm.createDirectory(this.imageRoot, true)
         this.fm.createDirectory(this.feedRoot, true);
@@ -262,6 +266,14 @@ const InstagramClient = {
     },
     //----------------------------------------------
     fetchGraphQL: async function (docId, variables) {
+        const blockedAt = await this.readBlockedAt();
+        const waitMs = ARGUMENTS.blockedWaitMinutes * 60 * 1000;
+
+        if (blockedAt && Date.now() - blockedAt < waitMs) {
+            const remaining = Math.ceil((waitMs - (Date.now() - blockedAt)) / 60000);
+            throw new Error(`Waiting after Instagram blocked the request. Retry in ${remaining} min.`);
+        }
+
         log(`fetching graphql ${docId}`);
 
         const cookies = await this.getCookies();
@@ -293,6 +305,7 @@ const InstagramClient = {
         try {
             response = JSON.parse(text);
         } catch (e) {
+            this.fm.writeString(this.blockedPath, JSON.stringify({ blockedAt: Date.now() }));
             throw new Error(`Instagram blocked the request (HTTP ${status}${redirectUrl ? ` -> ${redirectUrl}` : ''}). It may be rate limited. Please try again later.`);
         }
 
@@ -303,7 +316,24 @@ const InstagramClient = {
             throw new Error(`Instagram API error (HTTP ${status}) - ${reason}`);
         }
 
+        if (this.fm.fileExists(this.blockedPath)) {
+            this.fm.remove(this.blockedPath);
+        }
+
         return response;
+    },
+    //----------------------------------------------
+    readBlockedAt: async function () {
+
+        if (!this.fm.fileExists(this.blockedPath)) {
+            return undefined;
+        }
+
+        if (this.USES_ICLOUD) {
+            await this.fm.downloadFileFromiCloud(this.blockedPath);
+        }
+
+        return JSON.parse(this.fm.readString(this.blockedPath)).blockedAt;
     },
     //----------------------------------------------
     readFeedCache: async function (username) {
