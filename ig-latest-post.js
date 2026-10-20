@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.3.1';
+const VERSION = '2.3.2';
 
 const DEBUG = false;
 const log = (args) => {
@@ -449,9 +449,9 @@ const InstagramClient = {
             this.fm.remove(this.sessionPath);
         }
     },
-    saveImage: async function (image, imageUrl) {
+    saveImage: async function (imageData, imageUrl) {
         const regex = /(\d{1,}_\d{1,}_\d{1,}_n)/gi;
-        this.fm.writeImage(this.fm.joinPath(this.imageRoot, `${regex.exec(imageUrl).shift()}.jpg`), image);
+        this.fm.write(this.fm.joinPath(this.imageRoot, `${regex.exec(imageUrl).shift()}.jpg`), imageData);
     },
     readImage: async function () {
         const files = this.fm.listContents(this.imageRoot);
@@ -637,7 +637,13 @@ const createWidget = async (data, widgetFamily) => {
     const fontSize = getFontSize(widgetFamily);
     const img = await download('Image', data.display_url);
    
-    InstagramClient.saveImage(img, data.display_url);
+    try {
+        // cache the original resolution as raw bytes, so the widget
+        // does not have to decode the full-size image
+        await InstagramClient.saveImage(await download('Data', data.full_url), data.full_url);
+    } catch (e) {
+        log(`failed to cache image - ${e.message}`);
+    }
     
     const widget = new ListWidget();
     widget.refreshAfterDate = new Date((Date.now() + (1000 * 60 * ARGUMENTS.refreshInterval)));
