@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.3.2';
+const VERSION = '2.4.0';
 
 const DEBUG = false;
 const log = (args) => {
@@ -36,16 +36,18 @@ const LARGE_WIDGET_FAMILY = ['large', 'extraLarge'];
 
 const ARGUMENTS = {
     appId: '936619743392459',
-    // PolarisProfilePostsTabContentQuery_connection.
-    // Instagram may rotate this id on deploy.
+    // Instagram may rotate these ids on deploy.
+    // PolarisProfilePostsTabContentQuery_connection (isNeedLogin: true)
     profilePostsDocId: '29298961806354817',
+    // PolarisOwnerToTimelineMediaLoggedOutQuery (isNeedLogin: false)
+    timelineDocId: '29457667847192124',
     // reuse the fetched feed for this many minutes
     // before calling the API again (avoids rate limits)
     feedCacheMinutes: 60,
     // after Instagram blocks a request (rate limit),
     // skip API calls for this many minutes
     blockedWaitMinutes: 60,
-    isNeedLogin: true,
+    isNeedLogin: false,
     // desired interval in minutes to refresh the
     // widget. This will only tell IOS that it's
     // ready for a refresh, whether it actually 
@@ -150,6 +152,8 @@ const InstagramClient = {
         this.fm.createDirectory(this.root, true);
         this.fm.createDirectory(this.imageRoot, true)
         this.fm.createDirectory(this.feedRoot, true);
+        // set even without login so that "Clear cache" can remove an old session
+        this.sessionPath = this.fm.joinPath(this.root, 'session.json');
 
         if (ARGUMENTS.isNeedLogin) {
             // track the number of login attempts
@@ -157,7 +161,6 @@ const InstagramClient = {
             this.loginAttempts = 0;
             this.MAX_ATTEMPTS = 2;
 
-            this.sessionPath = this.fm.joinPath(this.root, 'session.json');
             this.sessionid = '';
         }
     },
@@ -265,7 +268,7 @@ const InstagramClient = {
         }
     },
     //----------------------------------------------
-    fetchGraphQL: async function (docId, variables) {
+    assertNotBlocked: async function () {
         const blockedAt = await this.readBlockedAt();
         const waitMs = ARGUMENTS.blockedWaitMinutes * 60 * 1000;
 
@@ -273,10 +276,49 @@ const InstagramClient = {
             const remaining = Math.ceil((waitMs - (Date.now() - blockedAt)) / 60000);
             throw new Error(`Waiting after Instagram blocked the request. Retry in ${remaining} min.`);
         }
+    },
+    //----------------------------------------------
+    markBlocked: function (status, redirectUrl) {
+        this.fm.writeString(this.blockedPath, JSON.stringify({ blockedAt: Date.now() }));
+        throw new Error(`Instagram blocked the request (HTTP ${status}${redirectUrl ? ` -> ${redirectUrl}` : ''}). It may be rate limited. Please try again later.`);
+    },
+    //----------------------------------------------
+    // the public profile page gives the numeric user id
+    // and a csrftoken cookie for the logged-out query
+    fetchProfile: async function (username) {
+        log(`fetching profile ${username}`);
 
+        const req = new Request(`https://www.instagram.com/${username}/`);
+        let redirectUrl = null;
+        req.onRedirect = (request) => {
+            redirectUrl = request.url;
+            return null;
+        };
+
+        const html = await req.loadString();
+        const status = req.response.statusCode;
+
+        if (!!redirectUrl || (status >= 300 && status < 400) || status === 429) {
+            this.markBlocked(status, redirectUrl);
+        }
+
+        const ownerId = (html.match(/profilePage_(\d+)/) || [])[1];
+        const csrf = ((req.response.cookies || []).find(cookie => cookie.name === 'csrftoken') || {}).value;
+
+        if (!ownerId) {
+            throw new Error(`Invalid user - ${username}`);
+        }
+
+        if (!csrf) {
+            throw new Error('Instagram csrftoken not found');
+        }
+
+        return { ownerId: ownerId, csrf: csrf };
+    },
+    //----------------------------------------------
+    fetchGraphQL: async function (docId, variables, cookies, referer) {
         log(`fetching graphql ${docId}`);
 
-        const cookies = await this.getCookies();
         const csrf = (cookies.match(/csrftoken=([^;]+)/) || [])[1] || '';
 
         const req = new Request('https://www.instagram.com/graphql/query');
@@ -285,7 +327,7 @@ const InstagramClient = {
             'X-IG-App-ID': ARGUMENTS.appId,
             'X-CSRFToken': csrf,
             'Content-Type': 'application/x-www-form-urlencoded',
-            Referer: 'https://www.instagram.com/',
+            Referer: referer,
             Cookie: cookies
         };
         req.body = `doc_id=${docId}&variables=${encodeURIComponent(JSON.stringify(variables))}`;
@@ -305,8 +347,15 @@ const InstagramClient = {
         try {
             response = JSON.parse(text);
         } catch (e) {
-            this.fm.writeString(this.blockedPath, JSON.stringify({ blockedAt: Date.now() }));
-            throw new Error(`Instagram blocked the request (HTTP ${status}${redirectUrl ? ` -> ${redirectUrl}` : ''}). It may be rate limited. Please try again later.`);
+            log(`non-JSON response - ${text.slice(0, 100)}`);
+        }
+
+        // a redirect may come with a JSON body such as "{}",
+        // so decide by the status code as well as the body
+        const isBlocked = !!redirectUrl || (status >= 300 && status < 400) || status === 429 || !response;
+
+        if (isBlocked) {
+            this.markBlocked(status, redirectUrl);
         }
 
         log(response);
@@ -358,16 +407,8 @@ const InstagramClient = {
         this.fm.writeString(path, JSON.stringify({ fetchedAt: Date.now(), items: items }));
     },
     //----------------------------------------------
-    getUserInfo: async function (username) {
-        const cachedItems = await this.readFeedCache(username);
-
-        if (cachedItems) {
-            log(`using cached feed - ${username}`);
-
-            return { items: cachedItems };
-        }
-
-        const count = Number(ARGUMENTS.maxRecentPosts);
+    // logged-in feed: uses the session saved by authenticate()
+    fetchLoggedInFeed: async function (username, count) {
         const response = await this.fetchGraphQL(ARGUMENTS.profilePostsDocId, {
             after: null,
             before: null,
@@ -386,8 +427,42 @@ const InstagramClient = {
             __relay_internal__pv__PolarisShortDramaEnabledrelayprovider: false,
             __relay_internal__pv__PolarisThreadsStyleCommentsEnabledrelayprovider: false,
             __relay_internal__pv__PolarisReelsRecoDebugOverlayEnabledrelayprovider: false
-        });
-        const edges = response?.data?.xdt_api__v1__feed__user_timeline_graphql_connection?.edges || [];
+        }, await this.getCookies(), 'https://www.instagram.com/');
+
+        return response?.data?.xdt_api__v1__feed__user_timeline_graphql_connection?.edges || [];
+    },
+    //----------------------------------------------
+    // logged-out feed: the same data a visitor sees on the public profile
+    fetchLoggedOutFeed: async function (username, count) {
+        const { ownerId, csrf } = await this.fetchProfile(username);
+        const response = await this.fetchGraphQL(ARGUMENTS.timelineDocId, {
+            owner_id: ownerId,
+            first: count,
+            after: null,
+            media_id_to_filter: null,
+            additional_media_to_fetch: null,
+            __relay_internal__pv__PolarisShortDramaEnabledrelayprovider: false,
+            __relay_internal__pv__PolarisThreadsStyleCommentsEnabledrelayprovider: false
+        }, `csrftoken=${csrf}`, `https://www.instagram.com/${username}/`);
+
+        return response?.data?.xdt_get_owner_to_timeline_media_logged_out?.edges || [];
+    },
+    //----------------------------------------------
+    getUserInfo: async function (username) {
+        const cachedItems = await this.readFeedCache(username);
+
+        if (cachedItems) {
+            log(`using cached feed - ${username}`);
+
+            return { items: cachedItems };
+        }
+
+        await this.assertNotBlocked();
+
+        const count = Number(ARGUMENTS.maxRecentPosts);
+        const edges = ARGUMENTS.isNeedLogin
+            ? await this.fetchLoggedInFeed(username, count)
+            : await this.fetchLoggedOutFeed(username, count);
 
         if (edges.length === 0) {
             throw new Error(`Invalid user - ${username}`);
