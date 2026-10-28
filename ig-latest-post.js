@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.4.0';
+const VERSION = '2.4.1';
 
 const DEBUG = false;
 const log = (args) => {
@@ -36,11 +36,9 @@ const LARGE_WIDGET_FAMILY = ['large', 'extraLarge'];
 
 const ARGUMENTS = {
     appId: '936619743392459',
-    // Instagram may rotate these ids on deploy.
+    // Instagram may rotate this id on deploy.
     // PolarisProfilePostsTabContentQuery_connection (isNeedLogin: true)
     profilePostsDocId: '29298961806354817',
-    // PolarisOwnerToTimelineMediaLoggedOutQuery (isNeedLogin: false)
-    timelineDocId: '29457667847192124',
     // reuse the fetched feed for this many minutes
     // before calling the API again (avoids rate limits)
     feedCacheMinutes: 60,
@@ -283,39 +281,6 @@ const InstagramClient = {
         throw new Error(`Instagram blocked the request (HTTP ${status}${redirectUrl ? ` -> ${redirectUrl}` : ''}). It may be rate limited. Please try again later.`);
     },
     //----------------------------------------------
-    // the public profile page gives the numeric user id
-    // and a csrftoken cookie for the logged-out query
-    fetchProfile: async function (username) {
-        log(`fetching profile ${username}`);
-
-        const req = new Request(`https://www.instagram.com/${username}/`);
-        let redirectUrl = null;
-        req.onRedirect = (request) => {
-            redirectUrl = request.url;
-            return null;
-        };
-
-        const html = await req.loadString();
-        const status = req.response.statusCode;
-
-        if (!!redirectUrl || (status >= 300 && status < 400) || status === 429) {
-            this.markBlocked(status, redirectUrl);
-        }
-
-        const ownerId = (html.match(/profilePage_(\d+)/) || [])[1];
-        const csrf = ((req.response.cookies || []).find(cookie => cookie.name === 'csrftoken') || {}).value;
-
-        if (!ownerId) {
-            throw new Error(`Invalid user - ${username}`);
-        }
-
-        if (!csrf) {
-            throw new Error('Instagram csrftoken not found');
-        }
-
-        return { ownerId: ownerId, csrf: csrf };
-    },
-    //----------------------------------------------
     fetchGraphQL: async function (docId, variables, cookies, referer) {
         log(`fetching graphql ${docId}`);
 
@@ -432,20 +397,55 @@ const InstagramClient = {
         return response?.data?.xdt_api__v1__feed__user_timeline_graphql_connection?.edges || [];
     },
     //----------------------------------------------
-    // logged-out feed: the same data a visitor sees on the public profile
+    // logged-out feed: the public profile page preloads its posts grid
+    // into the HTML (the logged-out GraphQL queries no longer return it),
+    // so load the page in a WebView like Safari and read that data
     fetchLoggedOutFeed: async function (username, count) {
-        const { ownerId, csrf } = await this.fetchProfile(username);
-        const response = await this.fetchGraphQL(ARGUMENTS.timelineDocId, {
-            owner_id: ownerId,
-            first: count,
-            after: null,
-            media_id_to_filter: null,
-            additional_media_to_fetch: null,
-            __relay_internal__pv__PolarisShortDramaEnabledrelayprovider: false,
-            __relay_internal__pv__PolarisThreadsStyleCommentsEnabledrelayprovider: false
-        }, `csrftoken=${csrf}`, `https://www.instagram.com/${username}/`);
+        log(`loading profile ${username}`);
 
-        return response?.data?.xdt_get_owner_to_timeline_media_logged_out?.edges || [];
+        const webView = new WebView();
+        await webView.loadURL(`https://www.instagram.com/${username}/`);
+
+        const result = JSON.parse(await webView.evaluateJavaScript(`(() => {
+            const findConnection = (obj) => {
+                if (!obj || typeof obj !== 'object') {
+                    return undefined;
+                }
+
+                if (obj.polaris_timeline_connection) {
+                    return obj.polaris_timeline_connection;
+                }
+
+                for (const key in obj) {
+                    const found = findConnection(obj[key]);
+
+                    if (found) {
+                        return found;
+                    }
+                }
+
+                return undefined;
+            };
+
+            for (const script of document.querySelectorAll('script[type="application/json"]')) {
+
+                if (script.textContent.includes('polaris_timeline_connection')) {
+                    const connection = findConnection(JSON.parse(script.textContent));
+
+                    if (connection) {
+                        return JSON.stringify({ url: location.href, edges: connection.edges });
+                    }
+                }
+            }
+
+            return JSON.stringify({ url: location.href, edges: null });
+        })()`));
+
+        if (!result.edges) {
+            throw new Error(`Instagram profile data not found - ${result.url}`);
+        }
+
+        return result.edges.slice(0, count);
     },
     //----------------------------------------------
     getUserInfo: async function (username) {
@@ -637,7 +637,8 @@ const getLatestPost = async (username) => {
     }
 
     // exclude videos (media_type 2), including video slides in carousels
-    const isImage = (media) => media.media_type != 2;
+    // (logged-out carousel slides only have __typename)
+    const isImage = (media) => media.media_type != 2 && media.__typename !== 'XIGPolarisVideoMedia';
     const items = user.items.filter(item => isImage(item) && (!item.carousel_media || item.carousel_media.some(isImage)));
 
     if (items.length === 0) {
@@ -745,12 +746,13 @@ const createWidget = async (data, widgetFamily) => {
         // center spacer to push items to the sides
         stats.addSpacer();
 
-        if (ARGUMENTS.showLikes) {
+        // the logged-out feed has no likes/comments counts
+        if (ARGUMENTS.showLikes && data.likes != null) {
             addSymbol(stats, 'heart.fill', fontSize);
             addText(stats, abbreviateNumber(data.likes), 'right', fontSize);
         }
 
-        if (ARGUMENTS.showComments) {
+        if (ARGUMENTS.showComments && data.comments != null) {
             addSymbol(stats, 'message.fill', fontSize);
             addText(stats, abbreviateNumber(data.comments), 'right', fontSize);
         }
