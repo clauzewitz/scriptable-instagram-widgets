@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.4.3';
+const VERSION = '2.4.4';
 
 const DEBUG = false;
 const log = (args) => {
@@ -802,7 +802,8 @@ const createWidget = async (data, widgetFamily) => {
     try {
         // cache the original resolution as raw bytes, so the widget
         // does not have to decode the full-size image
-        await InstagramClient.saveImage(await download('Data', data.full_url), data.full_url);
+        // Request has no loadData(); load() returns the raw Data
+        await InstagramClient.saveImage(await new Request(data.full_url).load(), data.full_url);
     } catch (e) {
         log(`failed to cache image - ${e.message}`);
     }
