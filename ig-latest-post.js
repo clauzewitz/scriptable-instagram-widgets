@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.4.2';
+const VERSION = '2.4.3';
 
 const DEBUG = false;
 const log = (args) => {
@@ -130,9 +130,11 @@ const isOnline = async () => {
     const webView = new WebView();
     await webView.loadURL('about:blank');
     
-    log(await webView.evaluateJavaScript('navigator.onLine'));
-    
-    return await webView.evaluateJavaScript('navigator.onLine');
+    const online = await webView.evaluateJavaScript('navigator.onLine');
+
+    log(online);
+
+    return online;
 };
 
 // InstagramClient module ------------------------
@@ -350,8 +352,14 @@ const InstagramClient = {
         return JSON.parse(this.fm.readString(this.blockedPath)).blockedAt;
     },
     //----------------------------------------------
+    // iPad gets different (desktop) data, so do not share the cache
+    // with iPhone through iCloud
+    feedCachePath: function (username) {
+        return this.fm.joinPath(this.feedRoot, `${username}${Device.isPad() ? '.ipad' : ''}.json`);
+    },
+    //----------------------------------------------
     readFeedCache: async function (username) {
-        const path = this.fm.joinPath(this.feedRoot, `${username}.json`);
+        const path = this.feedCachePath(username);
 
         if (!this.fm.fileExists(path)) {
             return undefined;
@@ -368,7 +376,7 @@ const InstagramClient = {
     },
     //----------------------------------------------
     saveFeedCache: function (username, items) {
-        const path = this.fm.joinPath(this.feedRoot, `${username}.json`);
+        const path = this.feedCachePath(username);
         this.fm.writeString(path, JSON.stringify({ fetchedAt: Date.now(), items: items }));
     },
     //----------------------------------------------
@@ -397,39 +405,31 @@ const InstagramClient = {
         return response?.data?.xdt_api__v1__feed__user_timeline_graphql_connection?.edges || [];
     },
     //----------------------------------------------
-    // logged-out feed: the public profile page preloads its posts grid
-    // into the HTML (the logged-out GraphQL queries no longer return it),
-    // so load the page in a WebView like Safari and read that data
-    fetchLoggedOutFeed: async function (username, count) {
-        log(`loading profile ${username}`);
-
-        const req = new Request(`https://www.instagram.com/${username}/`);
-
-        // the iPadOS WebView requests the desktop site, which has a different
-        // posts structure, so ask for the mobile site like Safari's
-        // "Request Mobile Website"
-        if (Device.isPad()) {
-            const osVersion = Device.systemVersion().replace(/\./g, '_');
-            req.headers = {
-                'User-Agent': `Mozilla/5.0 (iPhone; CPU iPhone OS ${osVersion} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/${Device.systemVersion()} Mobile/15E148 Safari/604.1`
-            };
-        }
+    // logged-out pages preload their data into the HTML (the logged-out
+    // GraphQL queries no longer return it), so load the page in a WebView
+    // like Safari and return the first value found under one of the keys
+    loadPreloadedData: async function (url, keys) {
+        log(`loading ${url}`);
 
         const webView = new WebView();
-        await webView.loadRequest(req);
+        await webView.loadRequest(new Request(url));
 
-        const result = JSON.parse(await webView.evaluateJavaScript(`(() => {
-            const findConnection = (obj) => {
+        return JSON.parse(await webView.evaluateJavaScript(`(() => {
+            const keys = ${JSON.stringify(keys)};
+            const findData = (obj) => {
                 if (!obj || typeof obj !== 'object') {
                     return undefined;
                 }
 
-                if (obj.polaris_timeline_connection) {
-                    return obj.polaris_timeline_connection;
+                for (const key of keys) {
+
+                    if (obj[key]) {
+                        return obj[key];
+                    }
                 }
 
                 for (const key in obj) {
-                    const found = findConnection(obj[key]);
+                    const found = findData(obj[key]);
 
                     if (found) {
                         return found;
@@ -441,23 +441,57 @@ const InstagramClient = {
 
             for (const script of document.querySelectorAll('script[type="application/json"]')) {
 
-                if (script.textContent.includes('polaris_timeline_connection')) {
-                    const connection = findConnection(JSON.parse(script.textContent));
+                if (keys.some(key => script.textContent.includes(key))) {
+                    const data = findData(JSON.parse(script.textContent));
 
-                    if (connection) {
-                        return JSON.stringify({ url: location.href, edges: connection.edges });
+                    if (data) {
+                        return JSON.stringify({ url: location.href, data: data });
                     }
                 }
             }
 
-            return JSON.stringify({ url: location.href, edges: null });
+            return JSON.stringify({ url: location.href, data: null });
         })()`));
+    },
+    //----------------------------------------------
+    // logged-out feed: the iPadOS WebView gets the desktop page, which
+    // preloads polaris_ordered_timeline_connection (display_uri only)
+    // instead of polaris_timeline_connection
+    fetchLoggedOutFeed: async function (username, count) {
+        const { url, data } = await this.loadPreloadedData(`https://www.instagram.com/${username}/`, ['polaris_timeline_connection', 'polaris_ordered_timeline_connection']);
 
-        if (!result.edges) {
-            throw new Error(`Instagram profile data not found - ${result.url}`);
+        if (!data?.edges) {
+            throw new Error(`Instagram profile data not found - ${url}`);
         }
 
-        return result.edges.slice(0, count);
+        return data.edges.slice(0, count);
+    },
+    //----------------------------------------------
+    // logged-out post page: unlike the desktop profile page it has
+    // image candidates and carousel slides. the candidates have no
+    // width/height, but the first one is the original image
+    fetchLoggedOutPost: async function (code) {
+        const { url, data } = await this.loadPreloadedData(`https://www.instagram.com/p/${code}/`, ['if_not_gated_logged_out']);
+
+        if (!data?.image_versions2) {
+            throw new Error(`Instagram post data not found - ${url}`);
+        }
+
+        const toOriginal = (media) => ({
+            ...media,
+            image_versions2: {
+                candidates: [{
+                    url: media.image_versions2.candidates[0].url,
+                    width: media.original_width,
+                    height: media.original_height
+                }]
+            }
+        });
+
+        return {
+            ...toOriginal(data),
+            carousel_media: data.carousel_media?.map(toOriginal)
+        };
     },
     //----------------------------------------------
     getUserInfo: async function (username) {
@@ -660,9 +694,49 @@ const getLatestPost = async (username) => {
         };
     }
 
-    const item = getRandom(items);
+    // the desktop logged-out page (iPad) only has a low-res display_uri,
+    // so read the original image from the post page (keep display_uri
+    // if it fails to load). a carousel there may turn out to be videos
+    // only, then try another post, up to `attempts` post pages
+    const pickItem = async (candidates, attempts = 3) => {
+        const item = getRandom(candidates);
+
+        if (item.image_versions2) {
+            return item;
+        }
+
+        let post = undefined;
+
+        try {
+            post = await InstagramClient.fetchLoggedOutPost(item.code);
+        } catch (e) {
+            log(`failed to load post - ${e.message}`);
+
+            return item;
+        }
+
+        if (!post.carousel_media || post.carousel_media.some(isImage)) {
+            return post;
+        }
+
+        const rest = candidates.filter(candidate => candidate !== item);
+
+        return rest.length > 0 && attempts > 1 ? await pickItem(rest, attempts - 1) : undefined;
+    };
+
+    const item = await pickItem(items);
+
+    if (!item) {
+        return {
+            has_error: true,
+            message: `no image posts\n${username}`
+        };
+    }
+
     const media = item.carousel_media ? getRandom(item.carousel_media.filter(isImage)) : item;
-    const { widgetUrl, fullUrl } = pickImageUrls(media.image_versions2.candidates);
+    const { widgetUrl, fullUrl } = media.image_versions2
+        ? pickImageUrls(media.image_versions2.candidates)
+        : { widgetUrl: media.display_uri, fullUrl: media.display_uri };
 
     return {
         has_error: false,
