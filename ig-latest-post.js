@@ -21,7 +21,7 @@ v1.2.0 - Option to pick up to 12 of the most
 v1.1.0 - Options to show likes and comments count
 v1.0.0 - Initial release
 ----------------------------------------------- */
-const VERSION = '2.4.1';
+const VERSION = '2.4.2';
 
 const DEBUG = false;
 const log = (args) => {
@@ -403,8 +403,20 @@ const InstagramClient = {
     fetchLoggedOutFeed: async function (username, count) {
         log(`loading profile ${username}`);
 
+        const req = new Request(`https://www.instagram.com/${username}/`);
+
+        // the iPadOS WebView requests the desktop site, which has a different
+        // posts structure, so ask for the mobile site like Safari's
+        // "Request Mobile Website"
+        if (Device.isPad()) {
+            const osVersion = Device.systemVersion().replace(/\./g, '_');
+            req.headers = {
+                'User-Agent': `Mozilla/5.0 (iPhone; CPU iPhone OS ${osVersion} like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/${Device.systemVersion()} Mobile/15E148 Safari/604.1`
+            };
+        }
+
         const webView = new WebView();
-        await webView.loadURL(`https://www.instagram.com/${username}/`);
+        await webView.loadRequest(req);
 
         const result = JSON.parse(await webView.evaluateJavaScript(`(() => {
             const findConnection = (obj) => {
